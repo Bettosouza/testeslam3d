@@ -2,7 +2,7 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <title>Arena Slam 3D - Multiplayer</title>
 
   <!-- Tailwind CSS para interface responsiva -->
@@ -31,9 +31,10 @@
     html, body {
       margin: 0;
       padding: 0;
-      width: 100%;
-      height: 100%;
+      width: 100vw;
+      height: 100dvh;
       overflow: hidden;
+      touch-action: none;
       background-color: #2B1D16;
       font-family: 'Inter', sans-serif;
       color: #F4ECE1;
@@ -43,7 +44,7 @@
       position: fixed;
       inset: 0;
       width: 100vw;
-      height: 100vh;
+      height: 100dvh;
       z-index: 1;
       touch-action: none;
       background: radial-gradient(circle at 50% 35%, #5e2e20 0%, #2B1D16 75%);
@@ -56,7 +57,7 @@
     }
 
     .earthy-glass {
-      background: rgba(43, 29, 22, 0.88);
+      background: rgba(43, 29, 22, 0.90);
       backdrop-filter: blur(16px);
       -webkit-backdrop-filter: blur(16px);
       border: 1px solid rgba(217, 155, 38, 0.30);
@@ -64,7 +65,7 @@
     }
 
     .earthy-subcard {
-      background: rgba(27, 17, 12, 0.72);
+      background: rgba(27, 17, 12, 0.74);
       border: 1px solid rgba(244, 236, 225, 0.12);
     }
 
@@ -119,6 +120,83 @@
       pointer-events: none;
       z-index: 12;
     }
+
+    /* Barra superior com respeito ao notch/safe-area do celular */
+    #top-hud {
+      padding-top: max(8px, env(safe-area-inset-top));
+      padding-left: max(10px, env(safe-area-inset-left));
+      padding-right: max(10px, env(safe-area-inset-right));
+    }
+
+    /* Gaveta lateral no Desktop e Tela Cheia no Celular (<= 768px) */
+    #side-drawer {
+      position: fixed;
+      top: calc(max(8px, env(safe-area-inset-top)) + 64px);
+      right: 16px;
+      width: 375px;
+      max-width: calc(100vw - 32px);
+      max-height: calc(100dvh - 96px);
+      z-index: 1000;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    @media (max-width: 768px) {
+      #side-drawer {
+        inset: 0;
+        top: 0;
+        right: 0;
+        width: 100vw;
+        max-width: 100vw;
+        height: 100dvh;
+        max-height: 100dvh;
+        border-radius: 0 !important;
+        border: none !important;
+        background: rgba(28, 20, 16, 0.98) !important;
+      }
+    }
+
+    .drawer-sticky-header {
+      position: sticky;
+      top: 0;
+      z-index: 1010;
+      min-height: 56px;
+      padding: max(8px, env(safe-area-inset-top)) 14px 8px 14px;
+      background: #1c1410;
+      border-bottom: 1px solid rgba(217, 155, 38, 0.32);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+
+    .btn-close-drawer-top {
+      min-width: 104px;
+      min-height: 44px;
+      padding: 0 14px;
+      background: #c84b31;
+      color: #ffffff;
+      font-weight: 700;
+      font-size: 13px;
+      border-radius: 10px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      box-shadow: 0 4px 14px rgba(200, 75, 49, 0.45);
+      cursor: pointer;
+    }
+
+    .drawer-sticky-footer {
+      position: sticky;
+      bottom: 0;
+      z-index: 1010;
+      padding: 10px 14px max(12px, env(safe-area-inset-bottom)) 14px;
+      background: #1c1410;
+      border-top: 1px solid rgba(244, 236, 225, 0.14);
+      flex-shrink: 0;
+    }
   </style>
 </head>
 <body>
@@ -143,12 +221,11 @@
   <div id="remote-audio-container" class="hidden"></div>
 
   <!-- =======================================================================
-       1. PAINEL INICIAL (LOBBY MULTIPLAYER P2P)
+       1. MODAL DE LOBBY DE ENTRADA (CRIAR SLAM GM OU ENTRAR NA PLATEIA)
        ======================================================================= -->
-  <div id="lobby-overlay" class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-[#19100B]/75 backdrop-blur-sm overflow-y-auto">
+  <div id="lobby-overlay" class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-[#190F0A]/75 backdrop-blur-sm overflow-y-auto">
     <div class="earthy-glass w-full max-w-2xl rounded-3xl p-5 sm:p-7 border border-[#D99B26]/40 shadow-2xl my-auto space-y-5">
-
-      <!-- Cabeçalho do Lobby -->
+      <!-- Cabeçalho -->
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#F4ECE1]/10 pb-4">
         <div class="flex items-center gap-3">
           <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#C85A32] to-[#D99B26] flex items-center justify-center shadow-lg shrink-0">
@@ -157,49 +234,39 @@
             </svg>
           </div>
           <div>
-            <div class="flex flex-wrap items-center gap-2">
+            <div class="flex items-center gap-2 flex-wrap">
               <h1 class="text-xl sm:text-2xl font-extrabold tracking-tight text-[#F4ECE1]">ARENA SLAM 3D</h1>
-              <span class="px-2 py-0.5 text-[10px] font-extrabold uppercase rounded-full bg-[#4E6E58] text-[#F4ECE1]">Multiplayer P2P</span>
+              <span class="px-2 py-0.5 text-[10px] font-bold uppercase rounded-full bg-[#4E6E58] text-[#F4ECE1]">Multiplayer P2P</span>
             </div>
-            <p class="text-xs sm:text-sm text-[#F4ECE1]/75">Praça aberta de poesia falada • Jogue no PC e celular pelo link</p>
+            <p class="text-xs sm:text-sm text-[#F4ECE1]/75">Praça virtual de poesia falada • Crie sua sala ou entre pelo link</p>
           </div>
         </div>
 
-        <!-- Código da Sala + Botão Copiar Link de Convite -->
-        <div class="earthy-subcard rounded-2xl p-2.5 flex items-center justify-between sm:justify-end gap-2">
+        <!-- Código da Sala + Botão Copiar Link -->
+        <div class="earthy-subcard rounded-2xl px-3 py-2 flex items-center justify-between sm:justify-end gap-2">
           <div>
             <label for="lobby-room-code-input" class="block text-[10px] uppercase tracking-wider text-[#F4ECE1]/55">Código da Sala</label>
             <input id="lobby-room-code-input" type="text" maxlength="14" value="SLAM-2026"
               class="w-28 bg-transparent font-mono-led text-sm font-extrabold uppercase text-[#D99B26] focus:outline-none border-b border-[#D99B26]/40" />
           </div>
-          <button id="btn-copy-invite" type="button" class="px-3 py-2 rounded-xl bg-[#2B1D16] hover:bg-[#C85A32] border border-[#D99B26]/40 text-xs font-extrabold text-[#F4ECE1] transition flex items-center gap-1.5 shrink-0">
-            <svg class="w-3.5 h-3.5 text-[#D99B26]" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
-            </svg>
-            <span>Copiar Link de Convite</span>
+          <button id="btn-copy-invite" type="button" class="min-h-[40px] px-3 py-1.5 rounded-xl bg-[#2B1D16] hover:bg-[#C85A32] border border-[#D99B26]/40 text-[11px] font-bold text-[#F4ECE1] transition flex items-center gap-1 shrink-0">
+            <span>Copiar Link</span>
           </button>
         </div>
       </div>
 
-      <!-- Aviso automático quando a pessoa abre um link ?sala=CODIGO -->
-      <div id="lobby-invite-banner" class="hidden rounded-2xl px-4 py-2.5 bg-[#4E6E58]/30 border border-[#4E6E58] text-xs text-[#F4ECE1] flex items-center justify-between gap-2">
-        <span>Convite detectado para a sala <strong id="lobby-invite-code-label" class="font-mono-led text-[#D99B26]">SLAM-2026</strong>! Digite seu nome e entre na plateia.</span>
-      </div>
-
-      <!-- Grid Principal: Customização do Avatar + Modos de Entrada -->
+      <!-- Conteúdo em 2 Colunas -->
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-
-        <!-- Coluna Esquerda: Customização do Avatar -->
+        <!-- Coluna 1: Personalização do Avatar -->
         <div class="earthy-subcard rounded-2xl p-4 space-y-3.5">
-          <h2 class="text-xs font-extrabold uppercase tracking-wider text-[#D99B26]">1. Personalize seu Avatar</h2>
+          <h2 class="text-xs font-extrabold uppercase tracking-wider text-[#D99B26]">1. Seu Avatar na Praça</h2>
 
           <div>
             <label for="lobby-name-input" class="block text-xs font-semibold text-[#F4ECE1]/80 mb-1">Nome Artístico / Vulgo</label>
-            <input id="lobby-name-input" type="text" maxlength="18" placeholder="Ex: Poeta Kadu"
+            <input id="lobby-name-input" type="text" maxlength="18" value="" placeholder="Ex: MC Dandara ou Kadu"
               class="w-full px-3.5 py-2.5 rounded-xl bg-[#2B1D16] border border-[#F4ECE1]/20 text-sm font-semibold text-[#F4ECE1] focus:outline-none focus:border-[#D99B26]" />
           </div>
 
-          <!-- Tom de Pele -->
           <div>
             <span class="block text-xs font-semibold text-[#F4ECE1]/80 mb-1.5">Tom de Pele</span>
             <div class="flex items-center justify-between gap-1.5">
@@ -212,7 +279,6 @@
             </div>
           </div>
 
-          <!-- Cor da Peita -->
           <div>
             <span class="block text-xs font-semibold text-[#F4ECE1]/80 mb-1.5">Cor da Peita</span>
             <div class="grid grid-cols-6 gap-1.5">
@@ -221,42 +287,33 @@
               <button type="button" data-lobby-outfit="#4E6E58" class="lobby-outfit-btn h-8 rounded-xl border-2 border-transparent transition hover:scale-105" style="background:#4E6E58" title="Verde Oliva"></button>
               <button type="button" data-lobby-outfit="#8C4A32" class="lobby-outfit-btn h-8 rounded-xl border-2 border-transparent transition hover:scale-105" style="background:#8C4A32" title="Barro"></button>
               <button type="button" data-lobby-outfit="#F4ECE1" class="lobby-outfit-btn h-8 rounded-xl border-2 border-transparent transition hover:scale-105" style="background:#F4ECE1" title="Areia"></button>
-              <button type="button" data-lobby-outfit="#1F2421" class="lobby-outfit-btn h-8 rounded-xl border-2 border-transparent transition hover:scale-105" style="background:#1F2421" title="Carvão"></button>
+              <button type="button" data-lobby-outfit="#1F2421" class="lobby-outfit-btn h-8 rounded-xl border-2 border-transparent transition hover:scale-105" style="background:#1F2421" title="Preto Carvão"></button>
             </div>
           </div>
 
-          <!-- Acessório -->
           <div>
             <span class="block text-xs font-semibold text-[#F4ECE1]/80 mb-1.5">Cabelo / Acessório</span>
             <div class="grid grid-cols-2 gap-1.5">
-              <button type="button" data-lobby-acc="none" class="lobby-acc-btn py-1.5 px-2 rounded-xl text-[11px] font-bold bg-[#2B1D16] border border-[#F4ECE1]/15 text-[#F4ECE1]/80 hover:border-[#D99B26] transition">
-                Sem chapéu
-              </button>
-              <button type="button" data-lobby-acc="beanie" class="lobby-acc-btn py-1.5 px-2 rounded-xl text-[11px] font-bold bg-[#C85A32] border border-[#D99B26] text-[#F4ECE1] transition">
-                Gorro
-              </button>
-              <button type="button" data-lobby-acc="afro" class="lobby-acc-btn py-1.5 px-2 rounded-xl text-[11px] font-bold bg-[#2B1D16] border border-[#F4ECE1]/15 text-[#F4ECE1]/80 hover:border-[#D99B26] transition">
-                Black Power
-              </button>
-              <button type="button" data-lobby-acc="turban" class="lobby-acc-btn py-1.5 px-2 rounded-xl text-[11px] font-bold bg-[#2B1D16] border border-[#F4ECE1]/15 text-[#F4ECE1]/80 hover:border-[#D99B26] transition">
-                Faixa / Turbante
-              </button>
+              <button type="button" data-lobby-acc="none" class="lobby-acc-btn py-2 px-2 rounded-xl text-[11px] font-bold bg-[#2B1D16] border border-[#F4ECE1]/15 text-[#F4ECE1]/80 hover:border-[#D99B26] transition">Sem chapéu</button>
+              <button type="button" data-lobby-acc="beanie" class="lobby-acc-btn py-2 px-2 rounded-xl text-[11px] font-bold bg-[#C85A32] border border-[#D99B26] text-[#F4ECE1] transition">Gorro</button>
+              <button type="button" data-lobby-acc="afro" class="lobby-acc-btn py-2 px-2 rounded-xl text-[11px] font-bold bg-[#2B1D16] border border-[#F4ECE1]/15 text-[#F4ECE1]/80 hover:border-[#D99B26] transition">Black Power</button>
+              <button type="button" data-lobby-acc="turban" class="lobby-acc-btn py-2 px-2 rounded-xl text-[11px] font-bold bg-[#2B1D16] border border-[#F4ECE1]/15 text-[#F4ECE1]/80 hover:border-[#D99B26] transition">Faixa / Turbante</button>
             </div>
           </div>
         </div>
 
-        <!-- Coluna Direita: Escolher Modo de Entrada -->
+        <!-- Coluna 2: Criar Sala (Host GM) ou Entrar como Convidado (Plateia) -->
         <div class="flex flex-col justify-between gap-3">
           <!-- Botão 1: Criar Slam (GM • 1ª Pessoa) -->
-          <div id="card-create-gm" class="earthy-subcard rounded-2xl p-4 border border-[#D99B26]/35 space-y-2.5">
+          <div id="card-create-gm" class="earthy-subcard rounded-2xl p-4 border border-[#D99B26]/40 space-y-2.5">
             <div class="flex items-center justify-between">
-              <span class="text-xs font-extrabold uppercase tracking-wider text-[#D99B26]">Host da Sala (Anfitrião)</span>
+              <span class="text-xs font-extrabold uppercase tracking-wider text-[#D99B26]">Anfitrião da Edição</span>
               <span class="px-2 py-0.5 rounded-md bg-[#C85A32]/30 border border-[#C85A32] text-[10px] font-bold text-[#F4ECE1]">1ª Pessoa</span>
             </div>
             <p class="text-xs text-[#F4ECE1]/75 leading-relaxed">
               Abre a sala multiplayer como <strong>Slammaster (GM)</strong>. Você escolhe os 5 jurados, sorteia os poetas, controla o cronômetro e pode adicionar bots de teste.
             </p>
-            <button id="btn-create-gm" type="button" class="w-full py-3 px-4 rounded-xl font-extrabold text-xs sm:text-sm uppercase tracking-wide bg-gradient-to-r from-[#C85A32] to-[#D99B26] text-[#2B1D16] hover:brightness-110 active:scale-[0.99] transition shadow-lg cursor-pointer">
+            <button id="btn-create-gm" type="button" class="w-full min-h-[46px] py-3 px-4 rounded-xl font-extrabold text-xs sm:text-sm uppercase tracking-wide bg-gradient-to-r from-[#C85A32] to-[#D99B26] text-[#2B1D16] hover:brightness-110 active:scale-[0.99] transition shadow-lg cursor-pointer">
               Criar Slam (GM • 1ª Pessoa)
             </button>
           </div>
@@ -270,7 +327,7 @@
             <p class="text-xs text-[#F4ECE1]/75 leading-relaxed">
               Conecta-se à sala do GM usando o código acima. Caminhe pela praça, mande salves no chat e entre no sorteio quando as inscrições abrirem.
             </p>
-            <button id="btn-join-audience" type="button" class="w-full py-3 px-4 rounded-xl font-extrabold text-xs sm:text-sm uppercase tracking-wide bg-[#4E6E58] hover:bg-[#5c8168] text-[#F4ECE1] active:scale-[0.99] transition shadow-lg cursor-pointer">
+            <button id="btn-join-audience" type="button" class="w-full min-h-[46px] py-3 px-4 rounded-xl font-extrabold text-xs sm:text-sm uppercase tracking-wide bg-[#4E6E58] hover:bg-[#5c8168] text-[#F4ECE1] active:scale-[0.99] transition shadow-lg cursor-pointer">
               Entrar no Slam (Plateia • 3ª Pessoa)
             </button>
           </div>
@@ -280,107 +337,116 @@
   </div>
 
   <!-- =======================================================================
-       2. HUD SUPERIOR (STATUS MULTIPLAYER + CÂMERA + VOZ DO PALCO)
+       2. HUD SUPERIOR COMPACTO (STATUS ONLINE + CÂMERA + SYNC + MENU)
        ======================================================================= -->
-  <header id="top-hud" class="fixed top-3 left-3 right-3 sm:top-4 sm:left-4 sm:right-4 z-20 hidden flex-wrap items-start justify-between gap-2 pointer-events-none">
-    <!-- Bloco Esquerdo: Sala, Status P2P, Papel e Cronômetro -->
-    <div class="earthy-glass rounded-2xl p-3 pointer-events-auto flex flex-wrap items-center gap-3">
-      <div class="flex items-center gap-2.5">
-        <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-[#C85A32] to-[#D99B26] flex items-center justify-center shrink-0">
-          <svg class="w-5 h-5 text-[#2B1D16]" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5-3c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
-          </svg>
+  <header id="top-hud" class="fixed top-0 left-0 right-0 z-30 hidden items-center justify-between gap-2 pointer-events-none">
+    <!-- Bloco Esquerdo: Status Online, Contador da Praça e Cronômetro -->
+    <div class="earthy-glass rounded-2xl px-2.5 py-1.5 pointer-events-auto flex items-center gap-2.5 min-h-[44px] min-w-0">
+      <div class="min-w-0">
+        <div class="flex items-center gap-1.5 flex-wrap">
+          <span id="hud-net-status" class="text-[11px] font-extrabold text-[#F4ECE1] truncate">🟡 Conectando...</span>
+          <span class="text-[#F4ECE1]/40 text-xs">•</span>
+          <span class="text-[11px] font-bold text-[#D99B26] whitespace-nowrap"><span id="hud-player-count">1</span> na praça</span>
         </div>
-        <div>
-          <div class="flex items-center gap-1.5 flex-wrap">
-            <span id="hud-room-code" class="font-mono-led text-xs sm:text-sm font-extrabold text-[#D99B26]">SLAM-2026</span>
-            <span id="hud-role-badge" class="px-2 py-0.5 text-[10px] font-extrabold uppercase rounded-md bg-[#C85A32] text-[#F4ECE1]">GM</span>
-            <span id="hud-net-status" class="px-2 py-0.5 text-[10px] font-bold rounded-md bg-[#4E6E58]/40 text-[#F4ECE1]">Conectando P2P...</span>
-          </div>
-          <p class="text-[11px] text-[#F4ECE1]/75">
-            <span id="hud-player-count">1</span> na praça • <span id="hud-stage-poet">Palco Livre</span>
-          </p>
+        <div class="flex items-center gap-1.5 text-[10px] text-[#F4ECE1]/75 truncate">
+          <span id="hud-room-code" class="font-mono-led font-bold text-[#D99B26]">SLAM-2026</span>
+          <span id="hud-role-badge" class="px-1.5 py-0.2 rounded bg-[#C85A32] text-[#F4ECE1] font-extrabold uppercase">GM</span>
+          <span id="hud-stage-poet" class="truncate max-w-[110px] sm:max-w-[160px]">Palco Livre</span>
         </div>
       </div>
 
-      <!-- Cronômetro Sincronizado -->
-      <div class="pl-3 border-l border-[#F4ECE1]/15 flex items-center gap-2">
-        <div>
-          <span class="block text-[9px] uppercase tracking-wider text-[#F4ECE1]/55">Tempo (3:00)</span>
-          <div class="flex items-center gap-1.5">
-            <span id="hud-timer" class="font-mono-led text-base sm:text-lg font-extrabold text-[#F4ECE1]">00:00</span>
-            <span id="hud-timer-badge" class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#4E6E58] text-[#F4ECE1]">PRONTO</span>
-          </div>
-        </div>
+      <!-- Cronômetro Compacto -->
+      <div class="pl-2 border-l border-[#F4ECE1]/15 flex flex-col items-end shrink-0">
+        <span id="hud-timer" class="font-mono-led text-xs sm:text-sm font-extrabold text-[#F4ECE1] leading-none">00:00</span>
+        <span id="hud-timer-badge" class="mt-0.5 text-[9px] font-bold px-1.5 py-0.2 rounded bg-[#4E6E58] text-[#F4ECE1]">PRONTO</span>
       </div>
     </div>
 
-    <!-- Bloco Direito: Copiar Convite + Câmera 1ª/3ª + Mic Palco + Gaveta -->
-    <div class="flex flex-wrap items-center gap-2 pointer-events-auto">
-      <button id="btn-hud-invite" type="button" class="earthy-glass px-3 py-2.5 rounded-2xl text-xs font-extrabold text-[#D99B26] hover:border-[#D99B26] transition flex items-center gap-1.5 shadow-lg">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
-        </svg>
-        <span class="hidden sm:inline">Convidar</span>
-      </button>
-
+    <!-- Bloco Direito: Câmera 1ª/3ª, Sincronizar, Mic Palco e Abrir Painel -->
+    <div class="flex items-center gap-1.5 pointer-events-auto shrink-0">
       <!-- Microfone WebRTC (Ativo para GM ou Poeta da Vez) -->
-      <button id="btn-stage-mic" type="button" class="hidden earthy-glass px-3 py-2.5 rounded-2xl text-xs font-extrabold text-[#F4ECE1] hover:border-[#D99B26] transition flex items-center gap-1.5 shadow-lg">
+      <button id="btn-stage-mic" type="button" class="hidden earthy-glass min-h-[44px] px-2.5 rounded-xl text-xs font-extrabold text-[#F4ECE1] hover:border-[#D99B26] transition flex items-center gap-1.5 shadow-lg" title="Microfone de Palco">
         <span id="mic-dot" class="w-2.5 h-2.5 rounded-full bg-[#F4ECE1]/40"></span>
-        <span id="mic-label">Mic: Mudo</span>
+        <span id="mic-label" class="hidden md:inline">Mic: Mudo</span>
       </button>
 
       <!-- Alternar Câmera 1ª / 3ª Pessoa -->
-      <button id="btn-toggle-camera" type="button" class="earthy-glass px-3 py-2.5 rounded-2xl text-xs font-extrabold text-[#F4ECE1] hover:border-[#D99B26] transition flex items-center gap-1.5 shadow-lg" title="Alternar visão (Tecla V)">
-        <svg class="w-4 h-4 text-[#D99B26]" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-          <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
-        </svg>
-        <span id="camera-mode-label">1ª Pessoa (V)</span>
+      <button id="btn-toggle-camera" type="button" class="earthy-glass min-h-[44px] px-2.5 sm:px-3 rounded-xl text-xs font-extrabold text-[#F4ECE1] hover:border-[#D99B26] transition flex items-center gap-1 shadow-lg" title="Alternar visão (Tecla V)">
+        <span aria-hidden="true">👁️</span>
+        <span id="camera-mode-label">1ª/3ª</span>
       </button>
 
-      <!-- Abrir/Recolher Painel Lateral -->
-      <button id="btn-toggle-drawer" type="button" class="earthy-glass p-2.5 rounded-2xl text-[#F4ECE1] hover:border-[#D99B26] transition shadow-lg" aria-label="Alternar painel">
-        <svg class="w-5 h-5 text-[#D99B26]" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/>
-        </svg>
+      <!-- Sincronizar Agora -->
+      <button id="btn-force-sync" type="button" class="earthy-glass min-w-[44px] min-h-[44px] px-2.5 rounded-xl text-sm font-extrabold text-[#F4ECE1] hover:border-[#D99B26] active:scale-95 transition flex items-center justify-center shadow-lg" title="Sincronizar posições e sala">
+        🔄
+      </button>
+
+      <!-- Abrir Painel / Menu -->
+      <button id="btn-toggle-drawer" type="button" class="min-h-[44px] px-3 sm:px-3.5 rounded-xl bg-gradient-to-r from-[#C85A32] to-[#D99B26] text-[#2B1D16] font-extrabold text-xs sm:text-sm hover:brightness-110 active:scale-95 transition flex items-center gap-1.5 shadow-lg">
+        <span>☰</span>
+        <span>Painel</span>
       </button>
     </div>
   </header>
 
+  <!-- MINI-RADAR AO VIVO NO CANTO SUPERIOR DIREITO DA ARENA -->
+  <div id="mini-radar-box" class="fixed right-3 sm:right-4 z-20 hidden earthy-glass rounded-2xl p-1.5 pointer-events-none shadow-xl" style="top: calc(max(8px, env(safe-area-inset-top)) + 56px);">
+    <canvas id="mini-radar-canvas" width="96" height="96" class="rounded-xl block"></canvas>
+    <div class="flex items-center justify-between px-1 pt-0.5 text-[8px] font-bold uppercase tracking-wider text-[#F4ECE1]/70">
+      <span>Palco ▲</span>
+      <span id="radar-count-label">1</span>
+    </div>
+  </div>
+
   <!-- =======================================================================
-       3. GAVETA LATERAL DIREITA (ADAPTADA AO PAPEL REAL DO JOGADOR NA SALA)
+       3. GAVETA / MENU TELA CHEIA NO MOBILE COM CABEÇALHO E RODAPÉ FIXOS
        ======================================================================= -->
-  <aside id="side-drawer" class="fixed top-20 right-3 sm:top-20 sm:right-4 z-20 hidden w-[calc(100vw-24px)] max-w-[370px] max-h-[calc(100vh-125px)] earthy-glass rounded-2xl flex flex-col overflow-hidden transition-all duration-300">
+  <aside id="side-drawer" class="hidden earthy-glass rounded-2xl transition-all duration-200">
+
+    <!-- CABEÇALHO FIXO COM BOTÃO FECHAR -->
+    <div class="drawer-sticky-header">
+      <div class="min-w-0">
+        <span id="drawer-header-title" class="block text-sm font-extrabold text-[#F4ECE1] truncate">Menu da Arena Slam</span>
+        <span id="drawer-header-sub" class="block text-[11px] text-[#D99B26] truncate">Sala <span id="drawer-room-label">SLAM-2026</span></span>
+      </div>
+      <div class="flex items-center gap-2 shrink-0">
+        <button id="btn-drawer-copy-invite" type="button" class="min-h-[44px] px-2.5 rounded-xl bg-[#2B1D16] border border-[#D99B26]/40 text-[11px] font-extrabold text-[#D99B26] hover:bg-[#C85A32] hover:text-[#F4ECE1] transition">
+          🔗 Convite
+        </button>
+        <button id="btn-close-drawer-top" type="button" class="btn-close-drawer-top" aria-label="Fechar Menu">
+          ✕ Fechar
+        </button>
+      </div>
+    </div>
 
     <!-- ---------------------------------------------------------------------
          PAINEL A: SLAMMASTER (GM HOST)
          --------------------------------------------------------------------- -->
-    <div id="gm-panel" class="hidden flex-col h-full overflow-hidden">
-      <div class="px-3.5 pt-3 pb-2 bg-[#1D130E]/70 border-b border-[#F4ECE1]/10 flex items-center justify-between gap-2 shrink-0">
-        <span class="text-[11px] font-extrabold uppercase tracking-wider text-[#D99B26]">Controle do Slammaster (GM)</span>
-        <button id="btn-add-bots" type="button" class="px-2.5 py-1 rounded-lg bg-[#4E6E58] hover:bg-[#5c8168] text-[10px] font-extrabold text-[#F4ECE1] transition shadow">
+    <div id="gm-panel" class="hidden flex-col flex-1 min-h-0 overflow-hidden">
+      <div class="px-3.5 py-2 bg-[#1D130E]/70 border-b border-[#F4ECE1]/10 flex items-center justify-between gap-2 shrink-0">
+        <span class="text-[11px] font-extrabold uppercase tracking-wider text-[#D99B26]">Controle Slammaster (GM)</span>
+        <button id="btn-add-bots" type="button" class="min-h-[34px] px-2.5 py-1 rounded-lg bg-[#4E6E58] hover:bg-[#5c8168] text-[11px] font-extrabold text-[#F4ECE1] transition shadow">
           +4 Bots de Teste
         </button>
       </div>
 
       <!-- 4 Abas do GM -->
       <div class="grid grid-cols-4 border-b border-[#F4ECE1]/10 bg-[#1D130E]/40 p-1 gap-1 shrink-0">
-        <button type="button" data-gm-tab="juri" class="gm-tab-btn py-2 px-1 rounded-xl text-[11px] font-extrabold transition bg-[#C85A32] text-[#F4ECE1]">
+        <button type="button" data-gm-tab="juri" class="gm-tab-btn min-h-[38px] py-1.5 px-1 rounded-xl text-[11px] font-extrabold transition bg-[#C85A32] text-[#F4ECE1]">
           Júri (5)
         </button>
-        <button type="button" data-gm-tab="poetas" class="gm-tab-btn py-2 px-1 rounded-xl text-[11px] font-bold transition text-[#F4ECE1]/70 hover:text-[#F4ECE1]">
+        <button type="button" data-gm-tab="poetas" class="gm-tab-btn min-h-[38px] py-1.5 px-1 rounded-xl text-[11px] font-bold transition text-[#F4ECE1]/70 hover:text-[#F4ECE1]">
           Poetas
         </button>
-        <button type="button" data-gm-tab="palco" class="gm-tab-btn py-2 px-1 rounded-xl text-[11px] font-bold transition text-[#F4ECE1]/70 hover:text-[#F4ECE1]">
+        <button type="button" data-gm-tab="palco" class="gm-tab-btn min-h-[38px] py-1.5 px-1 rounded-xl text-[11px] font-bold transition text-[#F4ECE1]/70 hover:text-[#F4ECE1]">
           Palco
         </button>
-        <button type="button" data-gm-tab="chat" class="gm-tab-btn py-2 px-1 rounded-xl text-[11px] font-bold transition text-[#F4ECE1]/70 hover:text-[#F4ECE1]">
+        <button type="button" data-gm-tab="chat" class="gm-tab-btn min-h-[38px] py-1.5 px-1 rounded-xl text-[11px] font-bold transition text-[#F4ECE1]/70 hover:text-[#F4ECE1]">
           Chat
         </button>
       </div>
 
-      <div class="p-3.5 overflow-y-auto custom-scroll space-y-3">
+      <div class="p-3.5 flex-1 overflow-y-auto custom-scroll space-y-3">
 
         <!-- ABA 1: MESA DO JÚRI (5 JURADOS) -->
         <section id="gm-tab-juri" class="gm-tab-content space-y-3">
@@ -396,7 +462,7 @@
             </div>
           </div>
 
-          <button id="btn-gm-request-scores" type="button" class="w-full py-2.5 px-3 rounded-xl font-extrabold text-xs uppercase tracking-wide bg-gradient-to-r from-[#C85A32] to-[#D99B26] text-[#2B1D16] hover:brightness-110 transition shadow-lg">
+          <button id="btn-gm-request-scores" type="button" class="w-full min-h-[44px] py-2.5 px-3 rounded-xl font-extrabold text-xs uppercase tracking-wide bg-gradient-to-r from-[#C85A32] to-[#D99B26] text-[#2B1D16] hover:brightness-110 transition shadow-lg">
             Pedir / Revelar Notas do Júri
           </button>
 
@@ -407,7 +473,7 @@
               <span id="gm-self-score-val" class="font-mono-led text-lg font-extrabold text-[#F4ECE1]">9.8</span>
             </div>
             <input id="gm-self-score-slider" type="range" min="0" max="10" step="0.1" value="9.8" class="slam-slider" />
-            <button id="btn-gm-self-placard" type="button" class="w-full py-2 rounded-xl bg-[#2B1D16] hover:bg-[#C85A32] border border-[#D99B26]/40 text-xs font-extrabold text-[#F4ECE1] transition">
+            <button id="btn-gm-self-placard" type="button" class="w-full min-h-[42px] py-2 rounded-xl bg-[#2B1D16] hover:bg-[#C85A32] border border-[#D99B26]/40 text-xs font-extrabold text-[#F4ECE1] transition">
               Levantar / Baixar Minha Plaquinha (Espaço)
             </button>
           </div>
@@ -450,7 +516,7 @@
             <div id="gm-poet-pool-list" class="flex flex-wrap gap-1.5 min-h-[26px]">
               <span class="text-[11px] text-[#F4ECE1]/50">Abra inscrições ou adicione poetas.</span>
             </div>
-            <button id="btn-gm-draw-order" type="button" class="w-full py-2.5 px-3 rounded-xl font-extrabold text-xs uppercase tracking-wide bg-gradient-to-r from-[#D99B26] to-[#C85A32] text-[#2B1D16] hover:brightness-110 transition shadow">
+            <button id="btn-gm-draw-order" type="button" class="w-full min-h-[44px] py-2.5 px-3 rounded-xl font-extrabold text-xs uppercase tracking-wide bg-gradient-to-r from-[#D99B26] to-[#C85A32] text-[#2B1D16] hover:brightness-110 transition shadow">
               Sortear Ordem dos Poetas
             </button>
           </div>
@@ -463,7 +529,7 @@
             <ol id="gm-drawn-order-list" class="space-y-1 text-xs max-h-36 overflow-y-auto custom-scroll">
               <li class="text-[11px] text-[#F4ECE1]/50">Aguardando sorteio...</li>
             </ol>
-            <button id="btn-gm-call-next-poet" type="button" class="w-full py-2.5 px-3 rounded-xl font-extrabold text-xs uppercase tracking-wide bg-[#4E6E58] hover:bg-[#5c8168] text-[#F4ECE1] transition shadow">
+            <button id="btn-gm-call-next-poet" type="button" class="w-full min-h-[44px] py-2.5 px-3 rounded-xl font-extrabold text-xs uppercase tracking-wide bg-[#4E6E58] hover:bg-[#5c8168] text-[#F4ECE1] transition shadow">
               Chamar Próximo Poeta ao Palco
             </button>
           </div>
@@ -476,16 +542,16 @@
             <div id="gm-stage-timer-big" class="font-mono-led text-4xl font-extrabold text-[#F4ECE1]">00:00</div>
             <p class="text-[11px] text-[#F4ECE1]/65">Tolerância: 03:01 a 03:10 • Estouro: &gt; 03:10</p>
             <div class="grid grid-cols-3 gap-1.5 pt-1">
-              <button id="btn-gm-timer-start" type="button" class="py-2 rounded-xl bg-[#4E6E58] hover:bg-[#5c8168] text-xs font-extrabold text-[#F4ECE1]">Iniciar</button>
-              <button id="btn-gm-timer-pause" type="button" class="py-2 rounded-xl bg-[#D99B26] hover:brightness-110 text-xs font-extrabold text-[#2B1D16]">Pausar</button>
-              <button id="btn-gm-timer-reset" type="button" class="py-2 rounded-xl bg-[#2B1D16] hover:bg-[#C85A32] border border-[#F4ECE1]/20 text-xs font-extrabold text-[#F4ECE1]">Zerar</button>
+              <button id="btn-gm-timer-start" type="button" class="min-h-[40px] py-2 rounded-xl bg-[#4E6E58] hover:bg-[#5c8168] text-xs font-extrabold text-[#F4ECE1]">Iniciar</button>
+              <button id="btn-gm-timer-pause" type="button" class="min-h-[40px] py-2 rounded-xl bg-[#D99B26] hover:brightness-110 text-xs font-extrabold text-[#2B1D16]">Pausar</button>
+              <button id="btn-gm-timer-reset" type="button" class="min-h-[40px] py-2 rounded-xl bg-[#2B1D16] hover:bg-[#C85A32] border border-[#F4ECE1]/20 text-xs font-extrabold text-[#F4ECE1]">Zerar</button>
             </div>
           </div>
 
           <div class="earthy-subcard rounded-xl p-3 space-y-2">
             <span class="block text-xs font-extrabold text-[#F4ECE1]">Encerrar Rodada</span>
             <p class="text-[11px] text-[#F4ECE1]/70">Salva a nota oficial no ranking e baixa todas as plaquinhas.</p>
-            <button id="btn-gm-end-round" type="button" class="w-full py-2.5 px-3 rounded-xl font-extrabold text-xs uppercase tracking-wide bg-[#C85A32] hover:bg-[#d9673e] text-[#F4ECE1] transition shadow">
+            <button id="btn-gm-end-round" type="button" class="w-full min-h-[44px] py-2.5 px-3 rounded-xl font-extrabold text-xs uppercase tracking-wide bg-[#C85A32] hover:bg-[#d9673e] text-[#F4ECE1] transition shadow">
               Salvar Nota &amp; Baixar Placas
             </button>
           </div>
@@ -513,13 +579,13 @@
     <!-- ---------------------------------------------------------------------
          PAINEL B: JURADO OFICIAL (QUANDO O GM ESCALA ESTE JOGADOR NO JÚRI)
          --------------------------------------------------------------------- -->
-    <div id="juror-panel" class="hidden flex-col h-full overflow-hidden">
+    <div id="juror-panel" class="hidden flex-col flex-1 min-h-0 overflow-hidden">
       <div class="px-3.5 py-2.5 bg-[#D99B26]/20 border-b border-[#D99B26]/30 flex items-center justify-between shrink-0">
         <span class="text-xs font-extrabold uppercase tracking-wider text-[#D99B26]">Mesa do Júri • Sua Nota</span>
         <span class="px-2 py-0.5 rounded bg-[#D99B26] text-[#2B1D16] text-[10px] font-extrabold">JURADO</span>
       </div>
 
-      <div class="p-3.5 overflow-y-auto custom-scroll space-y-3">
+      <div class="p-3.5 flex-1 overflow-y-auto custom-scroll space-y-3">
         <div class="earthy-subcard rounded-xl p-3 space-y-2">
           <div class="flex items-center justify-between">
             <span class="text-xs font-semibold text-[#F4ECE1]/80">Nota (0.0 a 10.0)</span>
@@ -527,14 +593,14 @@
           </div>
           <input id="juror-score-slider" type="range" min="0" max="10" step="0.1" value="9.8" class="slam-slider" />
           <div class="grid grid-cols-4 gap-1.5 pt-1">
-            <button type="button" data-juror-quick="9.0" class="juror-quick-btn py-1.5 rounded-lg text-xs font-mono-led font-bold bg-[#2B1D16] hover:bg-[#8C4A32] border border-[#F4ECE1]/15">9.0</button>
-            <button type="button" data-juror-quick="9.5" class="juror-quick-btn py-1.5 rounded-lg text-xs font-mono-led font-bold bg-[#2B1D16] hover:bg-[#8C4A32] border border-[#F4ECE1]/15">9.5</button>
-            <button type="button" data-juror-quick="9.8" class="juror-quick-btn py-1.5 rounded-lg text-xs font-mono-led font-bold bg-[#2B1D16] hover:bg-[#8C4A32] border border-[#F4ECE1]/15">9.8</button>
-            <button type="button" data-juror-quick="10.0" class="juror-quick-btn py-1.5 rounded-lg text-xs font-mono-led font-bold bg-[#2B1D16] hover:bg-[#D99B26] hover:text-[#2B1D16] border border-[#D99B26]/40 text-[#D99B26]">10.0</button>
+            <button type="button" data-juror-quick="9.0" class="juror-quick-btn min-h-[38px] py-1.5 rounded-lg text-xs font-mono-led font-bold bg-[#2B1D16] hover:bg-[#8C4A32] border border-[#F4ECE1]/15">9.0</button>
+            <button type="button" data-juror-quick="9.5" class="juror-quick-btn min-h-[38px] py-1.5 rounded-lg text-xs font-mono-led font-bold bg-[#2B1D16] hover:bg-[#8C4A32] border border-[#F4ECE1]/15">9.5</button>
+            <button type="button" data-juror-quick="9.8" class="juror-quick-btn min-h-[38px] py-1.5 rounded-lg text-xs font-mono-led font-bold bg-[#2B1D16] hover:bg-[#8C4A32] border border-[#F4ECE1]/15">9.8</button>
+            <button type="button" data-juror-quick="10.0" class="juror-quick-btn min-h-[38px] py-1.5 rounded-lg text-xs font-mono-led font-bold bg-[#2B1D16] hover:bg-[#D99B26] hover:text-[#2B1D16] border border-[#D99B26]/40 text-[#D99B26]">10.0</button>
           </div>
         </div>
 
-        <button id="btn-juror-toggle-placard" type="button" class="w-full py-3 px-4 rounded-xl font-extrabold text-xs uppercase tracking-wide bg-gradient-to-r from-[#C85A32] to-[#D99B26] text-[#2B1D16] hover:brightness-110 transition shadow-lg">
+        <button id="btn-juror-toggle-placard" type="button" class="w-full min-h-[46px] py-3 px-4 rounded-xl font-extrabold text-xs uppercase tracking-wide bg-gradient-to-r from-[#C85A32] to-[#D99B26] text-[#2B1D16] hover:brightness-110 transition shadow-lg">
           Levantar Plaquinha (Espaço)
         </button>
 
@@ -553,20 +619,20 @@
     <!-- ---------------------------------------------------------------------
          PAINEL C: PLATEIA & POETA DA VEZ
          --------------------------------------------------------------------- -->
-    <div id="audience-panel" class="hidden flex-col h-full overflow-hidden">
+    <div id="audience-panel" class="hidden flex-col flex-1 min-h-0 overflow-hidden">
       <div class="px-3.5 py-2.5 bg-[#4E6E58]/25 border-b border-[#4E6E58]/40 flex items-center justify-between shrink-0">
         <span id="audience-panel-title" class="text-xs font-extrabold uppercase tracking-wider text-[#F4ECE1]">Roda da Plateia</span>
         <span id="audience-panel-tag" class="px-2 py-0.5 rounded bg-[#4E6E58] text-[#F4ECE1] text-[10px] font-extrabold">PLATEIA</span>
       </div>
 
-      <div class="p-3.5 overflow-y-auto custom-scroll space-y-3">
+      <div class="p-3.5 flex-1 overflow-y-auto custom-scroll space-y-3">
         <!-- Inscrição no Chapeuzinho Virtual -->
         <div class="earthy-subcard rounded-xl p-3 space-y-2 border border-[#4E6E58]/40">
           <div class="flex items-center justify-between">
             <span class="text-xs font-extrabold text-[#D99B26]">Chapeuzinho Virtual</span>
             <span id="audience-reg-badge" class="text-[10px] px-2 py-0.5 rounded bg-[#2B1D16] text-[#F4ECE1]/60">Fechado</span>
           </div>
-          <button id="btn-audience-signup" type="button" disabled class="w-full py-2.5 px-3 rounded-xl font-extrabold text-xs uppercase tracking-wide bg-[#2B1D16] text-[#F4ECE1]/45 border border-[#F4ECE1]/10 transition cursor-not-allowed">
+          <button id="btn-audience-signup" type="button" disabled class="w-full min-h-[44px] py-2.5 px-3 rounded-xl font-extrabold text-xs uppercase tracking-wide bg-[#2B1D16] text-[#F4ECE1]/45 border border-[#F4ECE1]/10 transition cursor-not-allowed">
             Quero Rimar (Aguardando GM)
           </button>
         </div>
@@ -575,9 +641,9 @@
         <div class="earthy-subcard rounded-xl p-3 space-y-2">
           <span class="block text-[11px] font-bold uppercase text-[#F4ECE1]/70">Gritos da Plateia (Balão 3D)</span>
           <div class="grid grid-cols-3 gap-1.5">
-            <button type="button" data-quick-chat="É POESIA!" class="quick-chat-btn py-2 px-1.5 rounded-xl text-[11px] font-extrabold bg-[#C85A32] hover:brightness-110 text-[#F4ECE1] transition">É POESIA!</button>
-            <button type="button" data-quick-chat="PESADO!" class="quick-chat-btn py-2 px-1.5 rounded-xl text-[11px] font-extrabold bg-[#D99B26] hover:brightness-110 text-[#2B1D16] transition">PESADO!</button>
-            <button type="button" data-quick-chat="SOLTA A VOZ!" class="quick-chat-btn py-2 px-1.5 rounded-xl text-[11px] font-extrabold bg-[#4E6E58] hover:brightness-110 text-[#F4ECE1] transition">SOLTA A VOZ!</button>
+            <button type="button" data-quick-chat="É POESIA!" class="quick-chat-btn min-h-[40px] py-2 px-1.5 rounded-xl text-[11px] font-extrabold bg-[#C85A32] hover:brightness-110 text-[#F4ECE1] transition">É POESIA!</button>
+            <button type="button" data-quick-chat="PESADO!" class="quick-chat-btn min-h-[40px] py-2 px-1.5 rounded-xl text-[11px] font-extrabold bg-[#D99B26] hover:brightness-110 text-[#2B1D16] transition">PESADO!</button>
+            <button type="button" data-quick-chat="SOLTA A VOZ!" class="quick-chat-btn min-h-[40px] py-2 px-1.5 rounded-xl text-[11px] font-extrabold bg-[#4E6E58] hover:brightness-110 text-[#F4ECE1] transition">SOLTA A VOZ!</button>
           </div>
         </div>
 
@@ -593,11 +659,40 @@
         </div>
       </div>
     </div>
+
+    <!-- RODAPÉ FIXO PARA FECHAMENTO FÁCIL COM UMA MÃO NO CELULAR -->
+    <div class="drawer-sticky-footer">
+      <button id="btn-close-drawer-bottom" type="button" class="w-full min-h-[46px] px-4 rounded-xl bg-[#c84b31] hover:brightness-110 active:scale-[0.99] text-white font-extrabold text-xs sm:text-sm tracking-wide shadow-lg transition flex items-center justify-center gap-2">
+        <span>✕</span>
+        <span>Fechar Menu e Voltar para a Arena</span>
+      </button>
+    </div>
   </aside>
 
-  <!-- JOYSTICK VIRTUAL ANALÓGICO (MOBILE / TOUCH - CANTO INFERIOR ESQUERDO) -->
-  <div id="virtual-joystick" class="fixed bottom-5 left-5 z-20 hidden w-28 h-28 sm:w-32 sm:h-32 earthy-glass rounded-full flex items-center justify-center touch-none opacity-85">
+  <!-- JOYSTICK VIRTUAL ANALÓGICO (MOBILE / TOUCH - CANTO INFERIOR ESQUERDO, Z-400) -->
+  <div id="virtual-joystick" class="fixed left-4 z-[400] hidden w-28 h-28 sm:w-32 sm:h-32 earthy-glass rounded-full flex items-center justify-center touch-none opacity-90" style="bottom: max(18px, env(safe-area-inset-bottom));">
     <div id="joystick-knob" class="w-11 h-11 rounded-full bg-gradient-to-br from-[#C85A32] to-[#D99B26] border-2 border-[#F4ECE1] shadow-lg pointer-events-none transition-transform duration-75"></div>
+  </div>
+
+  <!-- BOTÕES DE AÇÃO RÁPIDA NA ARENA (CANTO INFERIOR DIREITO, Z-400) -->
+  <div id="mobile-quick-actions" class="fixed right-4 z-[400] hidden flex-col items-end gap-2" style="bottom: max(18px, env(safe-area-inset-bottom));">
+    <!-- Plaquinha Rápida (Visível quando o jogador é Jurado) -->
+    <button id="btn-quick-placard" type="button" class="hidden min-h-[46px] px-3.5 rounded-2xl bg-gradient-to-r from-[#D99B26] to-[#C85A32] text-[#2B1D16] font-extrabold text-xs shadow-xl border border-[#F4ECE1]/40 active:scale-95 transition flex items-center gap-1.5">
+      <span>📋</span>
+      <span id="quick-placard-label">Plaquinha (9.8)</span>
+    </button>
+
+    <!-- Inscrição Rápida no Chapeuzinho (Visível quando inscrições abertas) -->
+    <button id="btn-quick-signup" type="button" class="hidden min-h-[46px] px-3.5 rounded-2xl bg-[#4E6E58] text-[#F4ECE1] font-extrabold text-xs shadow-xl border border-[#D99B26]/60 active:scale-95 transition flex items-center gap-1.5">
+      <span>🎩</span>
+      <span>Quero Rimar!</span>
+    </button>
+
+    <!-- Grito / Reação Rápida da Plateia (Balão 3D) -->
+    <button id="btn-quick-cheer" type="button" class="earthy-glass min-h-[46px] px-3.5 rounded-2xl text-[#F4ECE1] font-extrabold text-xs shadow-xl border border-[#D99B26]/40 active:scale-95 transition flex items-center gap-1.5">
+      <span>🔥</span>
+      <span>É POESIA!</span>
+    </button>
   </div>
 
   <!-- BARRA DE ATALHOS (DESKTOP) -->
@@ -612,37 +707,41 @@
   </div>
 
   <!-- TOAST DE FEEDBACK DISCRETO (Substitui alert/confirm) -->
-  <div id="toast-banner" class="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-full bg-[#C85A32] text-[#F4ECE1] text-xs font-extrabold shadow-xl opacity-0 pointer-events-none transition-opacity duration-300 border border-[#D99B26]/60 text-center max-w-[90vw]">
+  <div id="toast-banner" class="fixed bottom-24 left-1/2 -translate-x-1/2 z-[1100] px-4 py-2 rounded-full bg-[#C85A32] text-[#F4ECE1] text-xs font-extrabold shadow-xl opacity-0 pointer-events-none transition-opacity duration-300 border border-[#D99B26]/60 text-center max-w-[90vw]">
     Aviso
   </div>
 
   <script>
     /**
      * ARENA SLAM 3D - MULTIPLAYER P2P (GITHUB PAGES READY)
-     * Arquitetura blindada:
-     * 1. Eventos do Lobby registrados imediatamente no DOMContentLoaded antes de WebGL/PeerJS.
-     * 2. PeerJS WebRTC DataChannel + MediaStream (Mic de Palco) + BroadcastChannel entre abas.
+     * 1. Interface Mobile-First com gaveta em tela cheia e fechamento fixo no topo e rodapé.
+     * 2. PeerJS WebRTC DataChannel (Topologia Estrela 20Hz) + MediaStream (Mic de Palco) + BroadcastChannel.
      * 3. Renderizador Three.js r128 com texturas procedurais (pedra portuguesa, grafite, telão LED).
      */
     (function () {
       // =========================================================================
-      // 1. UTILITÁRIOS GERAIS E ESTADO MULTIPLAYER
+      // 1. UTILITÁRIOS DE IDENTIFICAÇÃO E ESTADO GLOBAL
       // =========================================================================
       function generateShortId(len) {
         const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
         let out = '';
         for (let i = 0; i < len; i++) {
-          out += chars[Math.floor(Math.random() * chars.length)];
+          out += chars.charAt(Math.floor(Math.random() * chars.length));
         }
         return out;
       }
 
-      const localUid = 'user-' + generateShortId(7);
+      function sanitizeRoomCode(raw) {
+        const cleaned = String(raw || '').trim().toUpperCase().replace(/[^A-Z0-9-]/g, '');
+        return cleaned || 'SLAM-2026';
+      }
+
+      const localUid = 'user-' + generateShortId(6);
 
       const appState = {
         hasEntered: false,
+        roomCode: 'SLAM-2026',
         isHost: false,
-        roomCode: 'SLAM-' + generateShortId(3),
         cameraMode: 'first', // 'first' | 'third'
 
         // Dados do jogador local
@@ -680,6 +779,7 @@
         },
 
         chatMessages: [],
+        drawerOpen: false,
 
         // Controles de movimento e câmera
         keys: { up: false, down: false, left: false, right: false },
@@ -699,83 +799,126 @@
       const clientConnections = new Map(); // Usado pelo GM: uid -> DataConnection
       let broadcastChannel = null;
       const seenMessageIds = new Set();
+      let relayIntervalId = null;
+      let heartbeatIntervalId = null;
+      let reconnectIntervalId = null;
 
-      // Referências do motor 3D
+      // Referências Three.js
       let threeReady = false;
-      let scene, camera, renderer, clock, stageSpot;
-      const avatarEntities = new Map(); // uid -> { root, parts, targetPos, targetRotY, ... }
+      let scene = null;
+      let camera = null;
+      let renderer = null;
+      let clock = null;
+      let stageSpot = null;
+      const avatarEntities = new Map(); // uid -> { root, leftLeg, rightLeg, ... }
       const festoonBulbs = [];
       const speakerCones = [];
-      let ledCanvas, ledCtx, ledTexture;
+      let ledCanvas = null;
+      let ledCtx = null;
+      let ledTexture = null;
 
       // =========================================================================
-      // 2. TOAST E CLIPBOARD SEGURO (SEM ALERT/CONFIRM)
+      // 2. TOAST, CLIPBOARD E PACOTES DE REDE
       // =========================================================================
       let toastTimer = null;
-      function showToast(text) {
-        const banner = document.getElementById('toast-banner');
-        if (!banner) return;
-        banner.textContent = text;
-        banner.style.opacity = '1';
+      function showToast(msg) {
+        const el = document.getElementById('toast-banner');
+        if (!el) return;
+        el.textContent = msg;
+        el.style.opacity = '1';
         if (toastTimer) clearTimeout(toastTimer);
         toastTimer = setTimeout(() => {
-          banner.style.opacity = '0';
-        }, 2600);
+          el.style.opacity = '0';
+        }, 2400);
       }
 
       function copyInviteLink() {
-        const cleanCode = sanitizeRoomCode(
-          document.getElementById('lobby-room-code-input')?.value || appState.roomCode
-        );
-        appState.roomCode = cleanCode;
-        const inviteUrl = `${window.location.origin}${window.location.pathname}?sala=${encodeURIComponent(cleanCode)}`;
-
+        const codeInput = document.getElementById('lobby-room-code-input');
+        if (codeInput && !appState.hasEntered) {
+          appState.roomCode = sanitizeRoomCode(codeInput.value);
+        }
+        const url = `${window.location.origin}${window.location.pathname}?sala=${appState.roomCode}`;
         const ta = document.createElement('textarea');
-        ta.value = inviteUrl;
+        ta.value = url;
         ta.style.position = 'fixed';
         ta.style.opacity = '0';
         document.body.appendChild(ta);
         ta.select();
         try {
           document.execCommand('copy');
-          showToast('Link de convite copiado!');
-        } catch (err) {
-          showToast('Sala: ' + cleanCode);
+          showToast(`Link copiado: ${appState.roomCode}`);
+        } catch (e) {
+          showToast(`Sala: ${appState.roomCode}`);
         }
         document.body.removeChild(ta);
       }
 
-      function sanitizeRoomCode(raw) {
-        const cleaned = String(raw || '').trim().toUpperCase().replace(/[^A-Z0-9-]/g, '');
-        return cleaned || 'SLAM-2026';
+      function sendPacketToHost(packet) {
+        if (hostConnection && hostConnection.open) {
+          try { hostConnection.send(packet); } catch (e) {}
+        }
+        if (broadcastChannel) {
+          try { broadcastChannel.postMessage(packet); } catch (e) {}
+        }
+      }
+
+      function broadcastRoomState() {
+        if (!appState.isHost) return;
+        const packet = {
+          type: 'STATE_SYNC',
+          msgId: generateShortId(8),
+          room: appState.room
+        };
+        clientConnections.forEach((conn) => {
+          if (conn && conn.open) {
+            try { conn.send(packet); } catch (e) {}
+          }
+        });
+        if (broadcastChannel) {
+          try { broadcastChannel.postMessage(packet); } catch (e) {}
+        }
+      }
+
+      function broadcastEventPacket(packet) {
+        if (appState.isHost) {
+          clientConnections.forEach((conn) => {
+            if (conn && conn.open) {
+              try { conn.send(packet); } catch (e) {}
+            }
+          });
+          if (broadcastChannel) {
+            try { broadcastChannel.postMessage(packet); } catch (e) {}
+          }
+        } else {
+          sendPacketToHost(packet);
+        }
       }
 
       // =========================================================================
-      // 3. REGISTRO IMEDIATO DO LOBBY E UI (ANTES DE WEBGL E PEERJS)
+      // 3. REGISTRO IMEDIATO DE TODOS OS EVENTOS DE INTERFACE
       // =========================================================================
       function bindLobbyAndUiEvents() {
-        // Verifica parâmetro ?sala=CODIGO na URL
+        // Verifica parâmetro ?sala= na URL
         const params = new URLSearchParams(window.location.search);
-        const urlSala = params.get('sala');
-        const roomInput = document.getElementById('lobby-room-code-input');
-
-        if (urlSala) {
-          appState.roomCode = sanitizeRoomCode(urlSala);
-          roomInput.value = appState.roomCode;
-          document.getElementById('lobby-invite-banner').classList.remove('hidden');
-          document.getElementById('lobby-invite-code-label').textContent = appState.roomCode;
-          document.getElementById('card-join-audience').classList.add('ring-2', 'ring-[#D99B26]');
-        } else {
-          roomInput.value = appState.roomCode;
+        const urlRoom = params.get('sala');
+        if (urlRoom) {
+          const cleanRoom = sanitizeRoomCode(urlRoom);
+          appState.roomCode = cleanRoom;
+          document.getElementById('lobby-room-code-input').value = cleanRoom;
+          const createCard = document.getElementById('card-create-gm');
+          const joinCard = document.getElementById('card-join-audience');
+          if (createCard && joinCard) {
+            createCard.classList.add('opacity-75');
+            joinCard.classList.add('ring-2', 'ring-[#D99B26]');
+          }
         }
 
-        roomInput.addEventListener('input', () => {
-          appState.roomCode = sanitizeRoomCode(roomInput.value);
-        });
-
-        // Botão Copiar Link de Convite (Lobby e HUD)
+        // Botões Copiar Link de Convite
         document.getElementById('btn-copy-invite').addEventListener('click', copyInviteLink);
-        document.getElementById('btn-hud-invite').addEventListener('click', copyInviteLink);
+        document.getElementById('btn-drawer-copy-invite').addEventListener('click', copyInviteLink);
+
+        // Botão Sincronizar Agora (HUD)
+        document.getElementById('btn-force-sync').addEventListener('click', forceNetworkSync);
 
         // Customização do Avatar no Lobby
         document.querySelectorAll('.lobby-skin-btn').forEach(btn => {
@@ -806,7 +949,7 @@
           });
         });
 
-        // BOTÕES PRINCIPAIS DO LOBBY (Destravados e imediatos)
+        // Botões Principais do Lobby
         document.getElementById('btn-create-gm').addEventListener('click', () => {
           enterSessionAs('gm');
         });
@@ -821,14 +964,27 @@
           showToast(appState.cameraMode === 'first' ? 'Câmera: 1ª Pessoa' : 'Câmera: 3ª Pessoa');
         });
 
-        // Gaveta Lateral Recolhível
-        let drawerVisible = true;
-        const sideDrawer = document.getElementById('side-drawer');
+        // Controle de Abertura e Fechamento da Gaveta / Menu Tela Cheia Mobile
         document.getElementById('btn-toggle-drawer').addEventListener('click', () => {
-          drawerVisible = !drawerVisible;
-          sideDrawer.classList.toggle('opacity-0', !drawerVisible);
-          sideDrawer.classList.toggle('pointer-events-none', !drawerVisible);
-          sideDrawer.classList.toggle('translate-x-4', !drawerVisible);
+          setDrawerOpen(!appState.drawerOpen);
+        });
+        document.getElementById('btn-close-drawer-top').addEventListener('click', () => {
+          setDrawerOpen(false);
+        });
+        document.getElementById('btn-close-drawer-bottom').addEventListener('click', () => {
+          setDrawerOpen(false);
+        });
+
+        // Botões de Ação Rápida na Arena (Canto Inferior Direito)
+        document.getElementById('btn-quick-placard').addEventListener('click', toggleLocalPlacard);
+        document.getElementById('btn-quick-signup').addEventListener('click', clientSignupForBattle);
+        const cheers = ['É POESIA!', 'PESADO!', 'SOLTA A VOZ!', 'QUE VERSO!'];
+        let cheerIdx = 0;
+        document.getElementById('btn-quick-cheer').addEventListener('click', () => {
+          const phrase = cheers[cheerIdx % cheers.length];
+          cheerIdx++;
+          sendChatMessage(phrase);
+          showToast(`Você mandou: ${phrase}`);
         });
 
         // Abas do Painel do GM
@@ -950,8 +1106,29 @@
       }
 
       // =========================================================================
-      // 4. ENTRADA NA SESSÃO (HOST GM OU CLIENTE PLATEIA)
+      // 4. CONTROLE DA GAVETA E ENTRADA NA SESSÃO (HOST GM OU CLIENTE PLATEIA)
       // =========================================================================
+      function setDrawerOpen(open) {
+        appState.drawerOpen = Boolean(open);
+        const sideDrawer = document.getElementById('side-drawer');
+        const radarBox = document.getElementById('mini-radar-box');
+        if (!sideDrawer) return;
+
+        if (appState.drawerOpen) {
+          sideDrawer.classList.remove('hidden');
+          sideDrawer.classList.add('flex');
+          if (radarBox && window.innerWidth <= 768) {
+            radarBox.classList.add('hidden');
+          }
+        } else {
+          sideDrawer.classList.add('hidden');
+          sideDrawer.classList.remove('flex');
+          if (radarBox && appState.hasEntered) {
+            radarBox.classList.remove('hidden');
+          }
+        }
+      }
+
       function enterSessionAs(mode) {
         const rawName = document.getElementById('lobby-name-input').value.trim();
         const codeVal = sanitizeRoomCode(document.getElementById('lobby-room-code-input').value);
@@ -976,65 +1153,153 @@
           appState.cameraPitch = 0.34;
         }
 
-        // Fecha o Lobby IMEDIATAMENTE e exibe HUDs
-        appState.hasEntered = true;
-        document.getElementById('lobby-overlay').classList.add('hidden');
-        document.getElementById('top-hud').classList.remove('hidden');
-        document.getElementById('top-hud').classList.add('flex');
-        document.getElementById('side-drawer').classList.remove('hidden');
-        document.getElementById('virtual-joystick').classList.remove('hidden');
-        document.getElementById('bottom-hints').classList.remove('hidden');
-        document.getElementById('hud-room-code').textContent = appState.roomCode;
-
-        // Configura câmera padrão (1ª pessoa para GM, 3ª pessoa para Plateia)
-        setCameraMode(appState.isHost ? 'first' : 'third');
-
-        // Registra o jogador local na sala
-        const playerRecord = {
-          uid: appState.localPlayer.uid,
-          name: appState.localPlayer.name,
-          skin: appState.localPlayer.skin,
-          outfit: appState.localPlayer.outfit,
-          acc: appState.localPlayer.acc,
-          x: appState.localPlayer.x,
-          y: appState.localPlayer.y,
-          z: appState.localPlayer.z,
-          rotY: appState.localPlayer.rotY,
-          isMoving: false,
-          score: appState.localPlayer.score,
-          placardRaised: false,
-          isBot: false
-        };
-
+        // Registra o jogador local na sala e cria seu avatar 3D
+        const playerRecord = Object.assign({}, appState.localPlayer);
         appState.room.players[localUid] = playerRecord;
         if (appState.isHost) {
           appState.room.gmUid = localUid;
         }
-
         syncAvatarEntity(playerRecord);
-        refreshAllUIs();
 
-        // Inicia transporte multiplayer (PeerJS WebRTC + BroadcastChannel)
+        // Fecha o Lobby IMEDIATAMENTE e exibe HUDs e controles táteis
+        appState.hasEntered = true;
+        document.getElementById('lobby-overlay').classList.add('hidden');
+        document.getElementById('top-hud').classList.remove('hidden');
+        document.getElementById('top-hud').classList.add('flex');
+        document.getElementById('mini-radar-box').classList.remove('hidden');
+        document.getElementById('virtual-joystick').classList.remove('hidden');
+        document.getElementById('mobile-quick-actions').classList.remove('hidden');
+        document.getElementById('mobile-quick-actions').classList.add('flex');
+        document.getElementById('bottom-hints').classList.remove('hidden');
+        document.getElementById('hud-room-code').textContent = appState.roomCode;
+        document.getElementById('drawer-room-label').textContent = appState.roomCode;
+
+        // No celular (<= 768px) começa com o menu fechado para visão limpa da arena; no desktop abre ao lado
+        setDrawerOpen(window.innerWidth > 768);
+
+        // Configura câmera padrão (1ª pessoa para GM, 3ª pessoa para Plateia)
+        setCameraMode(appState.isHost ? 'first' : 'third');
+
+        // Inicia transporte P2P (PeerJS + BroadcastChannel)
         initMultiplayerTransport();
 
-        if (appState.isHost) {
-          pushChatEntry('Sistema', `Sala ${appState.roomCode} criada por ${appState.localPlayer.name} (GM).`, true);
-          showToast('Sala criada! Compartilhe o link de convite.');
-        } else {
-          pushChatEntry('Sistema', `Conectando à sala ${appState.roomCode}...`, true);
-        }
+        // Atualiza UI inicial
+        refreshAllUIs();
+        pushChatEntry(
+          'Sistema',
+          appState.isHost
+            ? `Sala ${appState.roomCode} aberta! Compartilhe o link de convite para a galera entrar.`
+            : `Você entrou na sala ${appState.roomCode} como Plateia.`,
+          true
+        );
       }
 
       // =========================================================================
-      // 5. MULTIPLAYER P2P (PEERJS WEBRTC + BROADCASTCHANNEL ENTRE ABAS)
+      // 5. MULTIPLAYER P2P (PEERJS WEBRTC ESTRELA 20HZ + BROADCASTCHANNEL)
       // =========================================================================
       function setNetStatus(text, isOk) {
         const el = document.getElementById('hud-net-status');
         if (!el) return;
-        el.textContent = text;
+        el.textContent = isOk ? `🟢 ${text}` : `🟡 ${text}`;
         el.className = isOk
-          ? 'px-2 py-0.5 text-[10px] font-bold rounded-md bg-[#4E6E58] text-[#F4ECE1]'
-          : 'px-2 py-0.5 text-[10px] font-bold rounded-md bg-[#D99B26]/30 text-[#D99B26]';
+          ? 'text-[11px] font-extrabold text-[#8CE99A] truncate'
+          : 'text-[11px] font-extrabold text-[#D99B26] truncate';
+      }
+
+      function buildLocalPosPacket() {
+        const lp = appState.localPlayer;
+        const role = getPlayerRoleLabel(localUid);
+        return {
+          type: 'pos',
+          id: localUid,
+          uid: localUid,
+          name: lp.name,
+          skin: lp.skin,
+          shirt: lp.outfit,
+          outfit: lp.outfit,
+          hat: lp.acc,
+          acc: lp.acc,
+          role: role,
+          x: lp.x,
+          y: lp.y,
+          z: lp.z,
+          rotY: lp.rotY,
+          isMoving: Boolean(lp.isMoving),
+          score: lp.score,
+          placardRaised: Boolean(lp.placardRaised),
+          ts: Date.now()
+        };
+      }
+
+      function sendPosUpdate(force) {
+        if (!appState.hasEntered) return;
+        const pkt = buildLocalPosPacket();
+        if (appState.isHost) {
+          if (broadcastChannel) {
+            try { broadcastChannel.postMessage(pkt); } catch (e) {}
+          }
+          if (force) broadcastWorldPositions();
+        } else {
+          sendPacketToHost(pkt);
+        }
+      }
+
+      function broadcastWorldPositions() {
+        if (!appState.isHost) return;
+        const playersSnapshot = Object.values(appState.room.players).map(p => ({
+          id: p.uid,
+          uid: p.uid,
+          name: p.name,
+          skin: p.skin,
+          shirt: p.outfit,
+          outfit: p.outfit,
+          hat: p.acc,
+          acc: p.acc,
+          role: getPlayerRoleLabel(p.uid),
+          x: p.x,
+          y: p.y,
+          z: p.z,
+          rotY: p.rotY,
+          isMoving: Boolean(p.isMoving),
+          score: p.score,
+          placardRaised: Boolean(p.placardRaised),
+          isBot: Boolean(p.isBot)
+        }));
+
+        const packet = {
+          type: 'world_sync',
+          players: playersSnapshot,
+          ts: Date.now()
+        };
+
+        clientConnections.forEach((conn) => {
+          if (conn && conn.open) {
+            try { conn.send(packet); } catch (e) {}
+          }
+        });
+        if (broadcastChannel) {
+          try { broadcastChannel.postMessage(packet); } catch (e) {}
+        }
+      }
+
+      function forceNetworkSync() {
+        const hostPeerId = `arena-slam-v1-${appState.roomCode}`;
+        sendPosUpdate(true);
+        if (appState.isHost) {
+          broadcastRoomState();
+          broadcastWorldPositions();
+          showToast('Posições e sala sincronizadas!');
+        } else {
+          if (!hostConnection || !hostConnection.open) {
+            connectToHostPeer(hostPeerId);
+          }
+          sendPacketToHost({
+            type: 'HELLO',
+            msgId: generateShortId(8),
+            player: appState.room.players[localUid]
+          });
+          showToast('Sincronizando com o Host...');
+        }
       }
 
       function initMultiplayerTransport() {
@@ -1048,14 +1313,13 @@
               if (ev.data) handleIncomingNetworkPacket(ev.data, null);
             };
           }
-        } catch (e) {
-          // Ignora se indisponível
-        }
+        } catch (e) {}
 
-        // 2. PeerJS WebRTC P2P com servidores STUN públicos do Google
+        // 2. PeerJS WebRTC P2P com servidores STUN públicos para atravessar NAT/4G/5G
         try {
           if (typeof Peer === 'undefined') {
             setNetStatus('Modo Local', false);
+            startRealtimeSyncLoops();
             return;
           }
 
@@ -1066,15 +1330,16 @@
               iceServers: [
                 { urls: 'stun:stun.l.google.com:19302' },
                 { urls: 'stun:stun1.l.google.com:19302' },
-                { urls: 'stun:stun2.l.google.com:19302' }
+                { urls: 'stun:global.stun.twilio.com:3478' }
               ]
             }
           });
 
           peerInstance.on('open', () => {
             if (appState.isHost) {
-              setNetStatus('Sala Online (Host)', true);
+              setNetStatus('Online (Host)', true);
               broadcastRoomState();
+              broadcastWorldPositions();
             } else {
               setNetStatus('Buscando GM...', false);
               connectToHostPeer(hostPeerId);
@@ -1097,40 +1362,75 @@
 
           peerInstance.on('error', (err) => {
             if (err && err.type === 'unavailable-id' && appState.isHost) {
-              setNetStatus('Código em uso (Local)', false);
+              setNetStatus('Código em uso', false);
               showToast('Este código de sala já tem um Host ativo. Use outro código para criar.');
             } else if (!appState.isHost) {
-              setNetStatus('Aguardando Host...', false);
-              setTimeout(() => {
-                if (appState.hasEntered && !appState.isHost && (!hostConnection || !hostConnection.open)) {
-                  connectToHostPeer(hostPeerId);
-                }
-              }, 3000);
+              setNetStatus('Aguardando Host', false);
             }
           });
         } catch (err) {
           setNetStatus('Modo Local', false);
         }
 
-        // Envia pacotes iniciais via BroadcastChannel também
+        // Inicia loops de relay 20 Hz, heartbeat 800 ms e reconexão automática do cliente
+        startRealtimeSyncLoops();
+
         if (!appState.isHost) {
           sendPacketToHost({
             type: 'HELLO',
             msgId: generateShortId(8),
             player: appState.room.players[localUid]
           });
+          sendPosUpdate(true);
+        }
+      }
+
+      function startRealtimeSyncLoops() {
+        if (relayIntervalId) clearInterval(relayIntervalId);
+        if (heartbeatIntervalId) clearInterval(heartbeatIntervalId);
+        if (reconnectIntervalId) clearInterval(reconnectIntervalId);
+
+        // Loop de 20 Hz (a cada 50ms)
+        relayIntervalId = setInterval(() => {
+          if (!appState.hasEntered) return;
+          if (appState.localPlayer.isMoving) {
+            sendPosUpdate(false);
+          }
+          if (appState.isHost && (clientConnections.size > 0 || broadcastChannel)) {
+            broadcastWorldPositions();
+          }
+        }, 50);
+
+        // Heartbeat a cada 800ms quando parado para garantir presença e auto-cura
+        heartbeatIntervalId = setInterval(() => {
+          if (!appState.hasEntered) return;
+          sendPosUpdate(true);
+        }, 800);
+
+        // Reconexão automática caso o convidado entre antes do GM
+        if (!appState.isHost) {
+          const hostPeerId = `arena-slam-v1-${appState.roomCode}`;
+          reconnectIntervalId = setInterval(() => {
+            if (!appState.hasEntered || appState.isHost) return;
+            if (peerInstance && !peerInstance.disconnected && (!hostConnection || !hostConnection.open)) {
+              connectToHostPeer(hostPeerId);
+            }
+          }, 2800);
         }
       }
 
       function setupHostDataConnection(conn) {
         let remoteUid = null;
 
+        conn.on('open', () => {
+          broadcastRoomState();
+          broadcastWorldPositions();
+        });
+
         conn.on('data', (packet) => {
-          if (packet && packet.player && packet.player.uid) {
-            remoteUid = packet.player.uid;
-            clientConnections.set(remoteUid, conn);
-          } else if (packet && packet.uid) {
-            remoteUid = packet.uid;
+          const senderId = (packet && packet.player && packet.player.uid) || (packet && packet.uid) || (packet && packet.id);
+          if (senderId && senderId !== localUid) {
+            remoteUid = senderId;
             clientConnections.set(remoteUid, conn);
           }
           handleIncomingNetworkPacket(packet, conn);
@@ -1145,19 +1445,20 @@
       }
 
       function connectToHostPeer(hostPeerId) {
-        if (!peerInstance) return;
+        if (!peerInstance || peerInstance.disconnected) return;
         try {
           const conn = peerInstance.connect(hostPeerId, { reliable: true });
           hostConnection = conn;
 
           conn.on('open', () => {
-            setNetStatus('Conectado ao GM', true);
+            setNetStatus('Online', true);
             showToast('Conectado à sala ao vivo!');
             sendPacketToHost({
               type: 'HELLO',
               msgId: generateShortId(8),
               player: appState.room.players[localUid]
             });
+            sendPosUpdate(true);
           });
 
           conn.on('data', (packet) => {
@@ -1168,49 +1469,54 @@
             setNetStatus('Reconectando...', false);
           });
         } catch (e) {
-          setNetStatus('Falha P2P', false);
+          setNetStatus('Buscando Host...', false);
         }
       }
 
-      function sendPacketToHost(packet) {
-        if (hostConnection && hostConnection.open) {
-          try { hostConnection.send(packet); } catch (e) {}
-        }
-        if (broadcastChannel) {
-          try { broadcastChannel.postMessage(packet); } catch (e) {}
-        }
-      }
+      function ensurePlayerInWorld(data) {
+        const uid = data.uid || data.id;
+        if (!uid || uid === localUid) return null;
 
-      function broadcastRoomState() {
-        if (!appState.isHost) return;
-        const packet = {
-          type: 'STATE_SYNC',
-          msgId: generateShortId(8),
-          room: appState.room
-        };
-        clientConnections.forEach((conn) => {
-          if (conn && conn.open) {
-            try { conn.send(packet); } catch (e) {}
-          }
-        });
-        if (broadcastChannel) {
-          try { broadcastChannel.postMessage(packet); } catch (e) {}
-        }
-      }
+        let p = appState.room.players[uid];
+        const isNew = !p;
 
-      function broadcastEventPacket(packet) {
-        if (appState.isHost) {
-          clientConnections.forEach((conn) => {
-            if (conn && conn.open) {
-              try { conn.send(packet); } catch (e) {}
-            }
-          });
-          if (broadcastChannel) {
-            try { broadcastChannel.postMessage(packet); } catch (e) {}
-          }
+        if (isNew) {
+          p = {
+            uid: uid,
+            name: data.name || 'Poeta ' + uid.slice(-3),
+            skin: data.skin || '#8D5534',
+            outfit: data.outfit || data.shirt || '#4E6E58',
+            acc: data.acc || data.hat || 'none',
+            x: typeof data.x === 'number' ? data.x : 0,
+            y: typeof data.y === 'number' ? data.y : 0,
+            z: typeof data.z === 'number' ? data.z : 3.0,
+            rotY: typeof data.rotY === 'number' ? data.rotY : 0,
+            isMoving: Boolean(data.isMoving),
+            score: typeof data.score === 'number' ? data.score : 9.5,
+            placardRaised: Boolean(data.placardRaised),
+            isBot: Boolean(data.isBot)
+          };
+          appState.room.players[uid] = p;
         } else {
-          sendPacketToHost(packet);
+          if (data.name) p.name = data.name;
+          if (data.skin) p.skin = data.skin;
+          if (data.outfit || data.shirt) p.outfit = data.outfit || data.shirt;
+          if (data.acc || data.hat) p.acc = data.acc || data.hat;
+          if (typeof data.x === 'number') p.x = data.x;
+          if (typeof data.y === 'number') p.y = data.y;
+          if (typeof data.z === 'number') p.z = data.z;
+          if (typeof data.rotY === 'number') p.rotY = data.rotY;
+          if (typeof data.isMoving === 'boolean') p.isMoving = data.isMoving;
+          if (typeof data.score === 'number') p.score = data.score;
+          if (typeof data.placardRaised === 'boolean') p.placardRaised = data.placardRaised;
         }
+
+        // Auto-criação ou atualização do avatar 3D
+        syncAvatarEntity(p);
+        if (isNew) {
+          refreshAllUIs();
+        }
+        return p;
       }
 
       function handleIncomingNetworkPacket(packet, sourceConn) {
@@ -1227,23 +1533,18 @@
         // LÓGICA DO HOST (GM) RECEBENDO AÇÕES DOS CLIENTES
         if (appState.isHost) {
           if (packet.type === 'HELLO' && packet.player && packet.player.uid !== localUid) {
-            const p = packet.player;
-            appState.room.players[p.uid] = p;
-            syncAvatarEntity(p);
-            pushChatEntry('Sistema', `${p.name} entrou na praça.`, true);
+            const p = ensurePlayerInWorld(packet.player);
+            if (p) {
+              pushChatEntry('Sistema', `${p.name} entrou na praça.`, true);
+            }
             broadcastRoomState();
+            broadcastWorldPositions();
             refreshAllUIs();
-            // Se o GM está com o microfone de palco aberto, envia o stream ao novo jogador
             if (appState.micActive && appState.localAudioStream && peerInstance && sourceConn && sourceConn.peer) {
               try { peerInstance.call(sourceConn.peer, appState.localAudioStream); } catch (e) {}
             }
-          } else if (packet.type === 'MOVE' && packet.uid && appState.room.players[packet.uid]) {
-            const target = appState.room.players[packet.uid];
-            target.x = packet.x;
-            target.y = packet.y;
-            target.z = packet.z;
-            target.rotY = packet.rotY;
-            target.isMoving = packet.isMoving;
+          } else if (packet.type === 'pos' || packet.type === 'MOVE') {
+            ensurePlayerInWorld(packet);
           } else if (packet.type === 'SIGNUP_POET' && packet.uid) {
             if (appState.room.registrationsOpen) {
               gmAddPoetToRaffle(packet.uid, packet.name);
@@ -1260,7 +1561,6 @@
             refreshAllUIs();
           } else if (packet.type === 'CHAT') {
             pushChatEntry(packet.author, packet.text, false, packet.uid);
-            // Retransmite o chat para os demais clientes
             clientConnections.forEach((conn) => {
               if (conn && conn.open && conn !== sourceConn) {
                 try { conn.send(packet); } catch (e) {}
@@ -1271,7 +1571,15 @@
 
         // LÓGICA DO CLIENTE RECEBENDO SINCRONIZAÇÃO DO HOST (GM)
         if (!appState.isHost) {
-          if (packet.type === 'STATE_SYNC' && packet.room) {
+          if (packet.type === 'world_sync' && Array.isArray(packet.players)) {
+            packet.players.forEach((pData) => {
+              ensurePlayerInWorld(pData);
+            });
+            const countEl = document.getElementById('hud-player-count');
+            if (countEl) countEl.textContent = String(Object.keys(appState.room.players).length);
+          } else if (packet.type === 'pos') {
+            ensurePlayerInWorld(packet);
+          } else if (packet.type === 'STATE_SYNC' && packet.room) {
             applyRemoteRoomState(packet.room);
           } else if (packet.type === 'CHAT') {
             pushChatEntry(packet.author, packet.text, packet.isSystem, packet.uid);
@@ -1373,6 +1681,7 @@
         pushChatEntry('Slammaster', `+${added} poetas/plateia entraram na praça para teste!`, true);
         showToast(`+${added} bots adicionados na praça!`);
         broadcastRoomState();
+        broadcastWorldPositions();
         refreshAllUIs();
       }
 
@@ -1402,22 +1711,25 @@
         const allPlayers = Object.values(appState.room.players);
         if (allPlayers.length === 0) return;
 
-        // Baixa plaquinhas anteriores
         allPlayers.forEach(p => { p.placardRaised = false; });
         appState.localPlayer.placardRaised = false;
         appState.room.scoresRevealed = false;
         appState.room.officialTotal = null;
         appState.room.discardedUids = [];
 
-        // Embaralhamento Fisher-Yates
         const pool = [...allPlayers];
         for (let i = pool.length - 1; i > 0; i--) {
           const j = Math.floor(Math.random() * (i + 1));
-          [pool[i], pool[j]] = [pool[j], pool[i]];
+          const temp = pool[i];
+          pool[i] = pool[j];
+          pool[j] = temp;
         }
         appState.room.juryUids = pool.slice(0, 5).map(p => p.uid);
 
-        const names = appState.room.juryUids.map(id => appState.room.players[id]?.name).join(', ');
+        const names = appState.room.juryUids.map(id => {
+          const pl = appState.room.players[id];
+          return pl ? pl.name : id;
+        }).join(', ');
         pushChatEntry('Slammaster', `Mesa do júri sorteada: ${names}`, true);
         showToast('Jurados sorteados!');
         broadcastRoomState();
@@ -1443,7 +1755,6 @@
             p.placardRaised = true;
             appState.localPlayer.placardRaised = true;
           } else {
-            // Para jogadores humanos conectados, levanta com a nota atual deles (que podem ajustar em tempo real)
             p.placardRaised = true;
           }
         });
@@ -1556,7 +1867,6 @@
 
         if (appState.room.registrationsOpen) {
           pushChatEntry('Slammaster', 'Inscrições abertas no Chapeuzinho! Clique em "Quero Rimar".', true);
-          // Bots presentes entram espontaneamente no chapeuzinho
           Object.values(appState.room.players)
             .filter(p => p.isBot)
             .forEach(bot => {
@@ -1570,13 +1880,14 @@
         refreshAllUIs();
       }
 
-      function gmAddPoetToRaffle(uid, name, shouldBroadcast = true) {
+      function gmAddPoetToRaffle(uid, name, shouldBroadcast) {
+        if (shouldBroadcast === undefined) shouldBroadcast = true;
         if (!appState.isHost) return;
         const clean = String(name || '').trim();
         if (!clean) return;
         if (appState.room.registeredPoets.some(p => p.name.toLowerCase() === clean.toLowerCase())) return;
 
-        appState.room.registeredPoets.push({ uid, name: clean });
+        appState.room.registeredPoets.push({ uid: uid, name: clean });
         pushChatEntry(clean, 'Coloquei meu nome no chapeuzinho!', false, uid);
 
         if (shouldBroadcast) {
@@ -1613,7 +1924,9 @@
         const arr = [...appState.room.registeredPoets];
         for (let i = arr.length - 1; i > 0; i--) {
           const j = Math.floor(Math.random() * (i + 1));
-          [arr[i], arr[j]] = [arr[j], arr[i]];
+          const temp = arr[i];
+          arr[i] = arr[j];
+          arr[j] = temp;
         }
 
         appState.room.drawnOrder = arr.map(p => ({ uid: p.uid, name: p.name, done: false }));
@@ -1650,7 +1963,6 @@
         const nextPoet = appState.room.drawnOrder[nextIdx];
         appState.room.stagePoetUid = nextPoet.uid;
 
-        // Reseta cronômetro e baixa placas
         appState.room.elapsedSeconds = 0;
         appState.room.timerRunning = false;
         appState.room.scoresRevealed = false;
@@ -1659,7 +1971,6 @@
         Object.values(appState.room.players).forEach(p => { p.placardRaised = false; });
         appState.localPlayer.placardRaised = false;
 
-        // Posiciona o avatar do poeta no centro do palco junto ao microfone
         const poetPlayer = appState.room.players[nextPoet.uid];
         if (poetPlayer) {
           poetPlayer.x = 0;
@@ -1671,6 +1982,7 @@
         pushChatEntry('Slammaster', `Chamando ao palco (${nextIdx + 1}º): ${nextPoet.name}!`, true);
         showToast(`${nextPoet.name} no palco!`);
         broadcastRoomState();
+        broadcastWorldPositions();
         refreshAllUIs();
       }
 
@@ -1717,8 +2029,11 @@
         broadcastEventPacket(packet);
       }
 
-      function pushChatEntry(author, text, isSystem = false, speakerUid = null) {
-        appState.chatMessages.push({ author, text, isSystem });
+      function pushChatEntry(author, text, isSystem, speakerUid) {
+        if (isSystem === undefined) isSystem = false;
+        if (speakerUid === undefined) speakerUid = null;
+
+        appState.chatMessages.push({ author: author, text: text, isSystem: isSystem });
         if (appState.chatMessages.length > 45) appState.chatMessages.shift();
 
         const html = appState.chatMessages.map(m => {
@@ -1736,8 +2051,11 @@
           }
         });
 
-        // Dispara balão 3D acima do avatar que falou
-        const targetUid = speakerUid || Object.values(appState.room.players).find(p => p.name === author)?.uid;
+        let targetUid = speakerUid;
+        if (!targetUid) {
+          const found = Object.values(appState.room.players).find(p => p.name === author);
+          if (found) targetUid = found.uid;
+        }
         if (targetUid && avatarEntities.has(targetUid)) {
           showAvatarSpeechBubble(targetUid, text);
         }
@@ -1772,7 +2090,6 @@
             btn.classList.add('border-[#C85A32]');
             showToast('Microfone de palco aberto!');
 
-            // Transmite para os peers conectados
             if (peerInstance) {
               if (appState.isHost) {
                 clientConnections.forEach((conn) => {
@@ -1802,6 +2119,7 @@
 
       function attachRemoteAudioStream(peerId, stream) {
         const container = document.getElementById('remote-audio-container');
+        if (!container) return;
         let audioEl = document.getElementById(`audio-${peerId}`);
         if (!audioEl) {
           audioEl = document.createElement('audio');
@@ -1835,7 +2153,6 @@
         const stagePoet = appState.room.stagePoetUid ? appState.room.players[appState.room.stagePoetUid] : null;
         document.getElementById('hud-stage-poet').textContent = stagePoet ? `No Palco: ${stagePoet.name}` : 'Palco Livre';
 
-        // Atualiza Badge de Papel do Usuário Local
         const myRole = getPlayerRoleLabel(localUid);
         const roleBadge = document.getElementById('hud-role-badge');
         roleBadge.textContent = myRole;
@@ -1843,6 +2160,7 @@
         const gmPanel = document.getElementById('gm-panel');
         const jurorPanel = document.getElementById('juror-panel');
         const audiencePanel = document.getElementById('audience-panel');
+        const drawerTitle = document.getElementById('drawer-header-title');
 
         gmPanel.classList.add('hidden');
         jurorPanel.classList.add('hidden');
@@ -1851,15 +2169,37 @@
         if (appState.isHost) {
           gmPanel.classList.remove('hidden');
           gmPanel.classList.add('flex');
+          if (drawerTitle) drawerTitle.textContent = 'Painel Slammaster (GM)';
         } else if (appState.room.juryUids.includes(localUid)) {
           jurorPanel.classList.remove('hidden');
           jurorPanel.classList.add('flex');
+          if (drawerTitle) drawerTitle.textContent = 'Mesa do Júri • Votação';
         } else {
           audiencePanel.classList.remove('hidden');
           audiencePanel.classList.add('flex');
           const isPoet = appState.room.stagePoetUid === localUid;
           document.getElementById('audience-panel-title').textContent = isPoet ? 'Você está no Palco!' : 'Roda da Plateia';
           document.getElementById('audience-panel-tag').textContent = isPoet ? 'POETA' : 'PLATEIA';
+          if (drawerTitle) drawerTitle.textContent = isPoet ? 'Palco • Microfone Aberto' : 'Roda da Plateia & Chat';
+        }
+
+        // Botões de Ação Rápida na Arena (Canto Inferior Direito)
+        const isLocalJuror = appState.room.juryUids.includes(localUid);
+        const quickPlacardBtn = document.getElementById('btn-quick-placard');
+        const quickPlacardLabel = document.getElementById('quick-placard-label');
+        if (quickPlacardBtn) {
+          quickPlacardBtn.classList.toggle('hidden', !isLocalJuror);
+          if (quickPlacardLabel) {
+            quickPlacardLabel.textContent = appState.localPlayer.placardRaised
+              ? `Baixar (${appState.localPlayer.score.toFixed(1)})`
+              : `Levantar (${appState.localPlayer.score.toFixed(1)})`;
+          }
+        }
+
+        const alreadySignedQuick = appState.room.registeredPoets.some(p => p.uid === localUid);
+        const quickSignupBtn = document.getElementById('btn-quick-signup');
+        if (quickSignupBtn) {
+          quickSignupBtn.classList.toggle('hidden', !appState.room.registrationsOpen || alreadySignedQuick);
         }
 
         // Botão de Microfone de Palco visível para GM ou Poeta da Vez
@@ -1874,16 +2214,15 @@
         const timerBadge = document.getElementById('hud-timer-badge');
         if (appState.room.elapsedSeconds > 190) {
           timerBadge.textContent = 'ESTOURADO';
-          timerBadge.className = 'text-[9px] font-bold px-1.5 py-0.5 rounded bg-red-500/30 text-red-200';
+          timerBadge.className = 'mt-0.5 text-[9px] font-bold px-1.5 py-0.2 rounded bg-red-500/30 text-red-200';
         } else if (appState.room.elapsedSeconds > 180) {
           timerBadge.textContent = 'TOLERÂNCIA';
-          timerBadge.className = 'text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#D99B26]/30 text-[#D99B26]';
+          timerBadge.className = 'mt-0.5 text-[9px] font-bold px-1.5 py-0.2 rounded bg-[#D99B26]/30 text-[#D99B26]';
         } else {
           timerBadge.textContent = appState.room.timerRunning ? 'EM CENA' : 'PRONTO';
-          timerBadge.className = 'text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#4E6E58] text-[#F4ECE1]';
+          timerBadge.className = 'mt-0.5 text-[9px] font-bold px-1.5 py-0.2 rounded bg-[#4E6E58] text-[#F4ECE1]';
         }
 
-        // Atualiza UI do GM se for Host
         if (appState.isHost) {
           renderGmPanelDetails();
         }
@@ -1896,20 +2235,19 @@
           regBadge.textContent = 'Fechado';
           signupBtn.disabled = true;
           signupBtn.textContent = 'Quero Rimar (Aguardando GM)';
-          signupBtn.className = 'w-full py-2.5 px-3 rounded-xl font-extrabold text-xs uppercase tracking-wide bg-[#2B1D16] text-[#F4ECE1]/45 border border-[#F4ECE1]/10 cursor-not-allowed';
+          signupBtn.className = 'w-full min-h-[44px] py-2.5 px-3 rounded-xl font-extrabold text-xs uppercase tracking-wide bg-[#2B1D16] text-[#F4ECE1]/45 border border-[#F4ECE1]/10 cursor-not-allowed';
         } else if (alreadySigned) {
           regBadge.textContent = 'Inscrito';
           signupBtn.disabled = true;
           signupBtn.textContent = 'Nome no Chapeuzinho!';
-          signupBtn.className = 'w-full py-2.5 px-3 rounded-xl font-extrabold text-xs uppercase tracking-wide bg-[#4E6E58]/40 text-[#F4ECE1] border border-[#4E6E58]';
+          signupBtn.className = 'w-full min-h-[44px] py-2.5 px-3 rounded-xl font-extrabold text-xs uppercase tracking-wide bg-[#4E6E58]/40 text-[#F4ECE1] border border-[#4E6E58]';
         } else {
           regBadge.textContent = 'Aberto';
           signupBtn.disabled = false;
           signupBtn.textContent = 'Quero Rimar (Entrar no Sorteio)';
-          signupBtn.className = 'w-full py-2.5 px-3 rounded-xl font-extrabold text-xs uppercase tracking-wide bg-gradient-to-r from-[#C85A32] to-[#D99B26] text-[#2B1D16] hover:brightness-110 transition shadow';
+          signupBtn.className = 'w-full min-h-[44px] py-2.5 px-3 rounded-xl font-extrabold text-xs uppercase tracking-wide bg-gradient-to-r from-[#C85A32] to-[#D99B26] text-[#2B1D16] hover:brightness-110 transition shadow';
         }
 
-        // Atualiza Crachás e Plaquinhas 3D de todos os avatares
         playersList.forEach(p => {
           updateAvatarRoleAndPlacard(p);
         });
@@ -1918,7 +2256,6 @@
       }
 
       function renderGmPanelDetails() {
-        // Júri
         document.getElementById('gm-jury-count').textContent = String(appState.room.juryUids.length);
         document.getElementById('gm-self-judge-box').classList.toggle('hidden', !appState.room.juryUids.includes(localUid));
 
@@ -1947,7 +2284,7 @@
                 <span class="block text-xs font-bold text-[#F4ECE1] truncate">${escapeHtml(p.name)} ${p.uid === localUid ? '(Você)' : ''}</span>
                 <span class="text-[10px] text-[#F4ECE1]/55">${role}${p.isBot ? ' • Bot' : ''}</span>
               </div>
-              <button type="button" data-toggle-jury="${p.uid}" class="px-2.5 py-1 rounded-lg text-[11px] font-extrabold transition shrink-0 ${
+              <button type="button" data-toggle-jury="${p.uid}" class="px-2.5 py-1.5 rounded-lg text-[11px] font-extrabold transition shrink-0 ${
                 isJudge ? 'bg-[#C85A32] text-[#F4ECE1]' : 'bg-[#4E6E58]/80 hover:bg-[#4E6E58] text-[#F4ECE1]'
               }">
                 ${isJudge ? 'Remover' : '+ Júri'}
@@ -1963,7 +2300,6 @@
           btn.addEventListener('click', () => gmTogglePlayerInJury(btn.dataset.toggleJury));
         });
 
-        // Chapeuzinho / Poetas
         const regBtn = document.getElementById('btn-gm-toggle-reg');
         const regKnob = document.getElementById('gm-reg-knob');
         const regHint = document.getElementById('gm-reg-hint');
@@ -2008,7 +2344,6 @@
           }).join('');
         }
 
-        // Placar da Edição
         const lbEl = document.getElementById('gm-leaderboard-list');
         if (appState.room.leaderboard.length === 0) {
           lbEl.innerHTML = '<p class="text-[11px] text-[#F4ECE1]/50">Nenhuma pontuação salva ainda.</p>';
@@ -2035,23 +2370,18 @@
         ctx.closePath();
       }
 
-      /**
-       * Piso em Pedra Portuguesa (calçamento mosaico tradicional em tons areia, terracota e basalto).
-       */
       function createPortugueseStoneTexture() {
         const canvas = document.createElement('canvas');
         canvas.width = 512;
         canvas.height = 512;
         const ctx = canvas.getContext('2d');
 
-        // Rejunte escuro de terra batida
         ctx.fillStyle = '#2A1E18';
         ctx.fillRect(0, 0, 512, 512);
 
         const cell = 32;
         for (let y = 0; y < 512; y += cell) {
           for (let x = 0; x < 512; x += cell) {
-            // Padrão ondulado clássico de calçadão em pedra portuguesa
             const wave = Math.sin((x / 512) * Math.PI * 4) * 1.5;
             const band = Math.floor((y / cell + wave + 8) % 4);
             const isDark = band === 0;
@@ -2076,20 +2406,15 @@
         return tex;
       }
 
-      /**
-       * Muro urbano com arte de rua / grafite temático de Slam e Poesia.
-       */
       function createGraffitiWallTexture(variant) {
         const canvas = document.createElement('canvas');
         canvas.width = 1024;
         canvas.height = 256;
         const ctx = canvas.getContext('2d');
 
-        // Reboco terroso
         ctx.fillStyle = '#3C271E';
         ctx.fillRect(0, 0, 1024, 256);
 
-        // Formas geométricas de arte urbana
         const blobs = [
           { x: 140, y: 128, r: 95, c: '#C85A32' },
           { x: 320, y: 110, r: 80, c: '#D99B26' },
@@ -2104,7 +2429,6 @@
           ctx.fill();
         });
 
-        // Faixa de stencil urbano
         ctx.fillStyle = 'rgba(24, 15, 11, 0.72)';
         ctx.fillRect(40, 74, 944, 108);
 
@@ -2119,8 +2443,7 @@
         ];
         ctx.fillText(slogans[variant % slogans.length], 512, 128);
 
-        const tex = new THREE.CanvasTexture(canvas);
-        return tex;
+        return new THREE.CanvasTexture(canvas);
       }
 
       function createWoodTexture() {
@@ -2538,7 +2861,6 @@
 
           threeReady = true;
 
-          // Sincroniza qualquer jogador já registrado antes do WebGL terminar
           Object.values(appState.room.players).forEach(p => syncAvatarEntity(p));
           setCameraMode(appState.cameraMode);
 
@@ -2554,7 +2876,6 @@
           threeReady = false;
           const notice = document.getElementById('webgl-fallback-notice');
           if (notice) notice.classList.remove('hidden');
-          // Inicia loop leve de cronômetro/rede mesmo sem WebGL
           setInterval(() => {
             tickRoomTimer(0.25);
           }, 250);
@@ -2562,7 +2883,6 @@
       }
 
       function buildPlazaAndGraffitiWalls() {
-        // Piso em Pedra Portuguesa
         const floor = new THREE.Mesh(
           new THREE.PlaneGeometry(54, 54),
           new THREE.MeshStandardMaterial({ map: createPortugueseStoneTexture(), roughness: 0.85 })
@@ -2571,7 +2891,6 @@
         floor.receiveShadow = true;
         scene.add(floor);
 
-        // Muros com Arte Urbana / Grafite ao redor da praça
         const wallSpecs = [
           { x: 0, z: -26.5, w: 54, d: 0.8, rotY: 0, variant: 0 },
           { x: 0, z: 26.5, w: 54, d: 0.8, rotY: Math.PI, variant: 1 },
@@ -2591,7 +2910,6 @@
           scene.add(mesh);
         });
 
-        // Bancos e Floreiras
         const woodMat = new THREE.MeshStandardMaterial({ map: createWoodTexture(), roughness: 0.75 });
         const ironMat = new THREE.MeshStandardMaterial({ color: '#1C1714', metalness: 0.5, roughness: 0.5 });
         const planterMat = new THREE.MeshStandardMaterial({ color: '#C85A32', roughness: 0.8 });
@@ -2651,7 +2969,6 @@
         });
         const darkMetal = new THREE.MeshStandardMaterial({ color: '#1B1512', metalness: 0.6, roughness: 0.4 });
 
-        // Deck do palco (Altura Y = 0.9)
         const stageDeck = new THREE.Mesh(new THREE.BoxGeometry(12, 0.9, 7), deckMat);
         stageDeck.position.set(0, 0.45, -11.5);
         stageDeck.castShadow = true;
@@ -2662,7 +2979,6 @@
         frontTrim.position.set(0, 0.86, -8.0);
         scene.add(frontTrim);
 
-        // Rampa de acesso à esquerda do palco
         const rampLen = Math.hypot(3.2, 0.9);
         const rampAngle = Math.atan2(0.9, 3.2);
         const rampMesh = new THREE.Mesh(new THREE.BoxGeometry(rampLen, 0.16, 4.0), deckMat);
@@ -2672,7 +2988,6 @@
         rampMesh.receiveShadow = true;
         scene.add(rampMesh);
 
-        // Pedestal + Microfone central
         const micGroup = new THREE.Group();
         micGroup.position.set(0, 0.9, -9.3);
         const base = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.28, 0.05, 16), darkMetal);
@@ -2688,7 +3003,6 @@
         micGroup.add(base, pole, head);
         scene.add(micGroup);
 
-        // Torres de Caixas de Som
         const coneMat = new THREE.MeshStandardMaterial({ color: '#332721', roughness: 0.6 });
         [-7.2, 7.3].forEach((xPos, idx) => {
           const stack = new THREE.Group();
@@ -2706,7 +3020,6 @@
           scene.add(stack);
         });
 
-        // Telão LED 3D
         initLedCanvas();
         const frame = new THREE.Mesh(new THREE.BoxGeometry(9.6, 5.0, 0.35), darkMetal);
         frame.position.set(0, 3.65, -14.3);
@@ -2947,18 +3260,18 @@
 
         return {
           uid: p.uid,
-          root,
-          ring,
-          leftLeg,
-          rightLeg,
-          leftArm,
-          rightArm,
-          torso,
-          head,
-          placardGroup,
+          root: root,
+          ring: ring,
+          leftLeg: leftLeg,
+          rightLeg: rightLeg,
+          leftArm: leftArm,
+          rightArm: rightArm,
+          torso: torso,
+          head: head,
+          placardGroup: placardGroup,
           placardBoard: board,
-          badgeSprite,
-          chatSprite,
+          badgeSprite: badgeSprite,
+          chatSprite: chatSprite,
           chatTimer: null,
           targetPos: new THREE.Vector3(p.x, p.y, p.z),
           targetRotY: p.rotY,
@@ -3038,7 +3351,7 @@
         }
 
         const label = document.getElementById('camera-mode-label');
-        if (label) label.textContent = isFirst ? '1ª Pessoa (V)' : '3ª Pessoa (V)';
+        if (label) label.textContent = isFirst ? '1ª Pessoa' : '3ª Pessoa';
 
         const reticle = document.getElementById('first-person-reticle');
         if (reticle) reticle.classList.toggle('hidden', !isFirst || !appState.hasEntered);
@@ -3055,7 +3368,7 @@
         return 0;
       }
 
-      let lastMoveBroadcastTime = 0;
+      let wasMovingLastFrame = false;
 
       function updateLocalMovement(dt) {
         if (!appState.hasEntered) return;
@@ -3104,7 +3417,6 @@
           lp.rotY = appState.cameraYaw + Math.PI;
         }
 
-        // Espelha no registro da sala e na entidade 3D local
         const roomP = appState.room.players[localUid];
         if (roomP) {
           roomP.x = lp.x;
@@ -3121,24 +3433,68 @@
           localEnt.isMoving = lp.isMoving;
         }
 
-        // Envia atualização de posição via WebRTC (~12 Hz)
-        const now = performance.now();
-        if (now - lastMoveBroadcastTime > 85) {
-          lastMoveBroadcastTime = now;
-          if (!appState.isHost) {
-            sendPacketToHost({
-              type: 'MOVE',
-              uid: localUid,
-              x: lp.x,
-              y: lp.y,
-              z: lp.z,
-              rotY: lp.rotY,
-              isMoving: lp.isMoving
-            });
-          } else if (clientConnections.size > 0 || broadcastChannel) {
-            broadcastRoomState();
-          }
+        if (lp.isMoving !== wasMovingLastFrame) {
+          wasMovingLastFrame = lp.isMoving;
+          sendPosUpdate(true);
         }
+      }
+
+      function renderMiniRadar() {
+        const canvas = document.getElementById('mini-radar-canvas');
+        if (!canvas || !appState.hasEntered) return;
+        const ctx = canvas.getContext('2d');
+        const W = canvas.width;
+        const H = canvas.height;
+        const half = W / 2;
+        const scale = W / 54;
+
+        ctx.clearRect(0, 0, W, H);
+        ctx.fillStyle = 'rgba(24, 15, 11, 0.85)';
+        ctx.fillRect(0, 0, W, H);
+
+        // Palco ao Norte
+        const stageW = 12 * scale;
+        const stageH = 7 * scale;
+        const stageX = half - stageW / 2;
+        const stageY = half + (-15 * scale);
+        ctx.fillStyle = 'rgba(200, 90, 50, 0.45)';
+        ctx.fillRect(stageX, stageY, stageW, stageH);
+        ctx.strokeStyle = '#D99B26';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(stageX, stageY, stageW, stageH);
+
+        // Círculo da roda
+        ctx.beginPath();
+        ctx.arc(half, half, 12 * scale, 0, Math.PI * 2);
+        ctx.strokeStyle = 'rgba(244, 236, 225, 0.14)';
+        ctx.stroke();
+
+        const players = Object.values(appState.room.players);
+        const countEl = document.getElementById('radar-count-label');
+        if (countEl) countEl.textContent = String(players.length);
+
+        players.forEach((p) => {
+          const px = half + p.x * scale;
+          const py = half + p.z * scale;
+          const isMe = p.uid === localUid;
+          const isGm = p.uid === appState.room.gmUid;
+
+          ctx.beginPath();
+          ctx.arc(px, py, isMe ? 3.8 : 2.8, 0, Math.PI * 2);
+          ctx.fillStyle = isMe ? '#F4ECE1' : (isGm ? '#D99B26' : '#51CF66');
+          ctx.fill();
+
+          if (isMe) {
+            const dirX = px - Math.sin(appState.cameraYaw) * 7;
+            const dirY = py - Math.cos(appState.cameraYaw) * 7;
+            ctx.beginPath();
+            ctx.moveTo(px, py);
+            ctx.lineTo(dirX, dirY);
+            ctx.strokeStyle = '#D99B26';
+            ctx.lineWidth = 1.5;
+            ctx.stroke();
+          }
+        });
       }
 
       let lastWholeSecond = -1;
@@ -3162,19 +3518,26 @@
 
         tickRoomTimer(dt);
         updateLocalMovement(dt);
+        renderMiniRadar();
 
-        // Interpola avatares remotos e anima passos / placas
         avatarEntities.forEach((ent, uid) => {
+          let visuallyMoving = ent.isMoving;
+
           if (uid !== localUid) {
-            ent.root.position.lerp(ent.targetPos, Math.min(1, dt * 10));
+            const distBefore = ent.root.position.distanceTo(ent.targetPos);
+            const lerpAlpha = Math.min(1, dt * 14);
+            ent.root.position.lerp(ent.targetPos, lerpAlpha);
+
             let diff = ent.targetRotY - ent.root.rotation.y;
             while (diff > Math.PI) diff -= Math.PI * 2;
             while (diff < -Math.PI) diff += Math.PI * 2;
-            ent.root.rotation.y += diff * Math.min(1, dt * 10);
+            ent.root.rotation.y += diff * Math.min(1, dt * 14);
+
+            visuallyMoving = ent.isMoving || distBefore > 0.025;
           }
 
           const isStagePoet = appState.room.stagePoetUid === uid;
-          if (ent.isMoving) {
+          if (visuallyMoving) {
             const stride = Math.sin(elapsed * 11) * 0.65;
             ent.leftLeg.rotation.x = stride;
             ent.rightLeg.rotation.x = -stride;
@@ -3203,12 +3566,10 @@
           }
         });
 
-        // Pulsação leve das caixas de som e lâmpadas
         const pulse = 1 + Math.abs(Math.sin(elapsed * 6.5)) * 0.08;
         speakerCones.forEach(c => c.scale.set(pulse, 1, pulse));
         festoonBulbs.forEach(b => b.mesh.scale.setScalar(0.94 + Math.sin(elapsed * 3 + b.phase) * 0.08));
 
-        // Posicionamento da Câmera
         if (!appState.hasEntered) {
           const angle = Math.sin(elapsed * 0.22) * 0.48;
           camera.position.set(Math.sin(angle) * 14.5, 5.4, Math.cos(angle) * 13.5);
@@ -3296,10 +3657,11 @@
           }
         });
 
-        // Joystick Analógico Virtual (Touch / Mouse)
+        // Joystick Analógico Virtual (Touch e Mouse)
         const joyBase = document.getElementById('virtual-joystick');
         const joyKnob = document.getElementById('joystick-knob');
-        let joyActive = false;
+        let joyTouchId = null;
+        let joyMouseActive = false;
 
         function updateJoystickFromClient(clientX, clientY) {
           const rect = joyBase.getBoundingClientRect();
@@ -3321,7 +3683,8 @@
         }
 
         function resetJoystick() {
-          joyActive = false;
+          joyTouchId = null;
+          joyMouseActive = false;
           joyKnob.style.transform = 'translate(0px, 0px)';
           appState.joyVec.x = 0;
           appState.joyVec.y = 0;
@@ -3329,18 +3692,48 @@
 
         joyBase.addEventListener('touchstart', (e) => {
           e.preventDefault();
-          joyActive = true;
-          updateJoystickFromClient(e.touches[0].clientX, e.touches[0].clientY);
+          const t = e.changedTouches[0];
+          joyTouchId = t.identifier;
+          updateJoystickFromClient(t.clientX, t.clientY);
         }, { passive: false });
 
         joyBase.addEventListener('touchmove', (e) => {
-          if (!joyActive) return;
+          if (joyTouchId === null) return;
           e.preventDefault();
-          updateJoystickFromClient(e.touches[0].clientX, e.touches[0].clientY);
+          for (let i = 0; i < e.changedTouches.length; i++) {
+            const t = e.changedTouches[i];
+            if (t.identifier === joyTouchId) {
+              updateJoystickFromClient(t.clientX, t.clientY);
+            }
+          }
         }, { passive: false });
 
-        joyBase.addEventListener('touchend', resetJoystick);
+        joyBase.addEventListener('touchend', (e) => {
+          for (let i = 0; i < e.changedTouches.length; i++) {
+            if (e.changedTouches[i].identifier === joyTouchId) {
+              resetJoystick();
+            }
+          }
+        });
         joyBase.addEventListener('touchcancel', resetJoystick);
+
+        joyBase.addEventListener('mousedown', (e) => {
+          e.preventDefault();
+          joyMouseActive = true;
+          updateJoystickFromClient(e.clientX, e.clientY);
+        });
+
+        window.addEventListener('mousemove', (e) => {
+          if (joyMouseActive) {
+            updateJoystickFromClient(e.clientX, e.clientY);
+          }
+        });
+
+        window.addEventListener('mouseup', () => {
+          if (joyMouseActive) {
+            resetJoystick();
+          }
+        });
 
         // Órbita / Rotação da Câmera por Arraste no Canvas
         const canvasEl = document.getElementById('canvas-container');
@@ -3380,15 +3773,20 @@
 
         let camTouchId = null;
         canvasEl.addEventListener('touchstart', (e) => {
-          if (!appState.hasEntered) return;
-          const t = e.changedTouches[0];
-          camTouchId = t.identifier;
-          lastX = t.clientX;
-          lastY = t.clientY;
+          if (!appState.hasEntered || appState.drawerOpen) return;
+          for (let i = 0; i < e.changedTouches.length; i++) {
+            const t = e.changedTouches[i];
+            if (t.identifier !== joyTouchId && camTouchId === null) {
+              camTouchId = t.identifier;
+              lastX = t.clientX;
+              lastY = t.clientY;
+              break;
+            }
+          }
         }, { passive: true });
 
         canvasEl.addEventListener('touchmove', (e) => {
-          if (!appState.hasEntered || camTouchId === null) return;
+          if (!appState.hasEntered || appState.drawerOpen || camTouchId === null) return;
           for (let i = 0; i < e.changedTouches.length; i++) {
             const t = e.changedTouches[i];
             if (t.identifier === camTouchId) {
@@ -3396,10 +3794,10 @@
               const dy = t.clientY - lastY;
               lastX = t.clientX;
               lastY = t.clientY;
-              appState.cameraYaw -= dx * 0.0075;
+              appState.cameraYaw -= dx * 0.008;
               const minP = appState.cameraMode === 'first' ? -0.65 : 0.08;
               const maxP = appState.cameraMode === 'first' ? 0.65 : 1.05;
-              appState.cameraPitch = Math.max(minP, Math.min(maxP, appState.cameraPitch + dy * 0.006));
+              appState.cameraPitch = Math.max(minP, Math.min(maxP, appState.cameraPitch + dy * 0.0065));
             }
           }
         }, { passive: true });
@@ -3417,10 +3815,7 @@
       // 16. INICIALIZAÇÃO SEGURA NO DOMCONTENTLOADED
       // =========================================================================
       document.addEventListener('DOMContentLoaded', () => {
-        // 1º: Registra todos os cliques do Lobby e HUD imediatamente
         bindLobbyAndUiEvents();
-
-        // 2º: Inicializa o mundo 3D em bloco protegido (nunca bloqueia o Lobby)
         initThreeSceneSafe();
       });
     })();
