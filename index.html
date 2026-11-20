@@ -315,7 +315,7 @@
               <span class="px-2 py-0.5 rounded-md bg-[#4E6E58]/30 border border-[#4E6E58] text-[10px] font-bold text-[#F4ECE1]">3ª Pessoa</span>
             </div>
             <p class="text-xs text-[#F4ECE1]/75 leading-relaxed">
-              Conecta-se à sala do GM usando o código acima. Suba no <strong>Caixote do Encontrão Poético</strong>, mande salves no chat e participe da roda.
+              Conecta-se à sala do GM usando o código acima. Suba no <strong>Coreto</strong> ou no <strong>Caixote do Encontrão Poético</strong> e participe da roda.
             </p>
             <button id="btn-join-audience" type="button" class="w-full min-h-[46px] py-3 px-4 rounded-xl font-extrabold text-xs sm:text-sm uppercase tracking-wide bg-[#4E6E58] hover:bg-[#5c8168] text-[#F4ECE1] active:scale-[0.99] transition shadow-lg cursor-pointer">
               Entrar no Slam (Plateia • 3ª Pessoa)
@@ -560,6 +560,15 @@
               <p class="text-[11px] text-[#F4ECE1]/50">Nenhuma pontuação salva ainda.</p>
             </div>
           </div>
+
+          <!-- Encerrar Sala do Slam e Desligar Todos -->
+          <div class="earthy-subcard rounded-xl p-3 space-y-2 border border-red-500/40 bg-red-950/25">
+            <span class="block text-xs font-extrabold text-red-400">Encerrar Evento</span>
+            <p class="text-[11px] text-[#F4ECE1]/70">Fecha a sala do Slam, desconecta todos os participantes da praça e volta ao Lobby.</p>
+            <button id="btn-gm-close-room" type="button" class="w-full min-h-[44px] py-2.5 px-3 rounded-xl font-extrabold text-xs uppercase tracking-wide bg-red-700 hover:bg-red-600 text-white transition shadow-lg">
+              🚪 Fechar Sala e Desligar Todos
+            </button>
+          </div>
         </section>
 
         <!-- ABA 4: CHAT DO GM -->
@@ -609,6 +618,10 @@
             <button type="submit" class="px-3 py-1.5 rounded-xl bg-[#D99B26] text-[#2B1D16] font-extrabold text-xs">Enviar</button>
           </form>
         </div>
+
+        <button id="btn-juror-leave-slam" type="button" class="w-full min-h-[44px] py-2.5 px-3 rounded-xl font-extrabold text-xs uppercase tracking-wide bg-[#2B1D16] hover:bg-red-700 border border-red-500/40 text-red-300 hover:text-white transition">
+          🚪 Sair do Slam
+        </button>
       </div>
     </div>
 
@@ -648,6 +661,10 @@
             <button type="submit" class="px-3 py-2 rounded-xl bg-[#D99B26] text-[#2B1D16] font-extrabold text-xs">Enviar</button>
           </form>
         </div>
+
+        <button id="btn-poet-leave-slam" type="button" class="w-full min-h-[44px] py-2.5 px-3 rounded-xl font-extrabold text-xs uppercase tracking-wide bg-[#2B1D16] hover:bg-red-700 border border-red-500/40 text-red-300 hover:text-white transition">
+          🚪 Sair do Slam
+        </button>
       </div>
     </div>
 
@@ -705,7 +722,7 @@
      * 1. Interface Mobile-First com gaveta em tela cheia e fechamento fixo no topo e rodapé.
      * 2. Rastreamento 30 Hz (Celular <-> Web) via PeerJS DataChannel não-bloqueante + BroadcastChannel.
      * 3. Chat de Voz da Praça controlado pelo GM com mute individual e silêncio automático no palco.
-     * 4. Caixote 3D caminhável com o logo "ENCONTRÃO POÉTICO • SLAM NO CAIXOTE".
+     * 4. Coreto decagonal em 2 pavimentos e Caixote do Encontrão Poético caminháveis.
      */
     (function () {
       // =========================================================================
@@ -741,7 +758,6 @@
         isHost: false,
         cameraMode: 'first', // 'first' | 'third'
 
-        // Dados do jogador local
         localPlayer: {
           uid: localUid,
           peerId: null,
@@ -758,7 +774,6 @@
           placardRaised: false
         },
 
-        // Estado autoritativo da sala (sincronizado pelo Host GM)
         room: {
           gmUid: null,
           players: {},          // { [uid]: playerData }
@@ -781,29 +796,26 @@
         chatMessages: [],
         drawerOpen: false,
 
-        // Controles de movimento e câmera
         keys: { up: false, down: false, left: false, right: false },
         joyVec: { x: 0, y: 0 },
         cameraYaw: 0,
         cameraPitch: 0.05,
         cameraDistance: 9.5,
 
-        // Áudio WebRTC
         micActive: false,
         localAudioStream: null
       };
 
       // Referências da rede P2P e BroadcastChannel
       let peerInstance = null;
-      let hostConnection = null;           // Usado quando este cliente não é o GM
-      const clientConnections = new Map(); // Usado pelo GM: uid -> DataConnection
-      const activeAudioCalls = new Set();  // peerIds já chamados com stream local
-      const peerToUidMap = new Map();      // peerId -> uid para controle de mute no <audio>
+      let hostConnection = null;
+      const clientConnections = new Map();
+      const activeAudioCalls = new Set();
+      const peerToUidMap = new Map();
       let broadcastChannel = null;
       const seenMessageIds = new Set();
       let relayIntervalId = null;
       let heartbeatIntervalId = null;
-      let reconnectIntervalId = null;
       let localPosSeq = 0;
       let lastSentPosTime = 0;
       let lastSentX = 0;
@@ -863,9 +875,7 @@
         if (!conn || !conn.open) return;
         try {
           conn.send(packet);
-        } catch (err) {
-          // Ignora erro transitório de envio
-        }
+        } catch (err) {}
       }
 
       function broadcastFromHost(packet, excludeUid) {
@@ -898,7 +908,6 @@
 
       function hostBroadcastFullState() {
         if (!appState.isHost) return;
-        // Garante que o próprio Host esteja atualizado em room.players
         appState.room.players[localUid] = {
           ...appState.room.players[localUid],
           ...appState.localPlayer,
@@ -930,7 +939,7 @@
         const movedDist = Math.hypot(lp.x - lastSentX, lp.z - lastSentZ);
         const rotDiff = Math.abs(lp.rotY - lastSentRotY);
 
-        if (!force && now - lastSentPosTime < 33) return; // 30 Hz max
+        if (!force && now - lastSentPosTime < 33) return;
         if (!force && movedDist < 0.005 && rotDiff < 0.01 && now - lastSentPosTime < 700) return;
 
         lastSentPosTime = now;
@@ -971,7 +980,6 @@
       function handleIncomingPacket(pkt, fromConn) {
         if (!pkt || typeof pkt !== 'object') return;
 
-        // Evita duplicação de pacotes confiáveis (BroadcastChannel + PeerJS)
         if (pkt.msgId) {
           if (seenMessageIds.has(pkt.msgId)) return;
           seenMessageIds.add(pkt.msgId);
@@ -988,7 +996,6 @@
 
           let target = appState.room.players[pkt.uid];
           if (!target) {
-            // Auto-criação imediata do avatar se o pacote de posição chegar antes do join
             target = {
               uid: pkt.uid,
               peerId: pkt.peerId || null,
@@ -1014,7 +1021,6 @@
             syncAvatarEntities();
             refreshAllUIs();
           } else {
-            // Descarta pacotes fora de ordem
             if (typeof pkt.seq === 'number' && typeof target.lastSeq === 'number' && pkt.seq < target.lastSeq && (target.lastSeq - pkt.seq) < 500) {
               return;
             }
@@ -1065,7 +1071,6 @@
           const incomingPlayers = pkt.room.players || {};
           const currentPlayers = appState.room.players || {};
 
-          // Preserva interpolação suave das posições remotas já em andamento
           Object.keys(incomingPlayers).forEach(uid => {
             if (uid === localUid) return;
             const inc = incomingPlayers[uid];
@@ -1089,13 +1094,11 @@
           });
 
           appState.room = pkt.room;
-          // Mantém dados autoritativos locais de posição
           appState.room.players[localUid] = {
             ...(appState.room.players[localUid] || {}),
             ...appState.localPlayer
           };
 
-          // Verifica se o GM teleportou este jogador para o palco como Poeta da Vez
           if (appState.room.stagePoetUid === localUid && !appState.localPlayer.onStageApplied) {
             appState.localPlayer.x = 0;
             appState.localPlayer.y = 0.9;
@@ -1169,6 +1172,182 @@
         if (pkt.type === 'request_sync' && appState.isHost) {
           hostBroadcastFullState();
         }
+
+        // 9. Saída voluntária de participante (Recebido pelo Host GM)
+        if (pkt.type === 'leave' && appState.isHost && pkt.uid) {
+          removePlayerFromRoom(pkt.uid, pkt.name);
+          return;
+        }
+
+        // 10. Encerramento oficial da sala pelo GM (Recebido pelos convidados)
+        if (pkt.type === 'room_closed' && !appState.isHost) {
+          leaveArenaSession(pkt.reason || 'A sala foi fechada pelo Slammaster (GM).', true);
+          return;
+        }
+      }
+
+      function removePlayerFromRoom(targetUid, fallbackName) {
+        if (!appState.isHost || !targetUid || targetUid === localUid) return;
+        const leftName = appState.room.players[targetUid]?.name || fallbackName || 'Participante';
+        const conn = clientConnections.get(targetUid);
+        if (conn) {
+          try { conn.close(); } catch (e) {}
+          clientConnections.delete(targetUid);
+        }
+        delete appState.room.players[targetUid];
+        appState.room.juryUids = appState.room.juryUids.filter(id => id !== targetUid);
+        if (appState.room.stagePoetUid === targetUid) {
+          appState.room.stagePoetUid = null;
+          appState.room.timerRunning = false;
+        }
+        enforceVoiceMuteStates();
+        syncAvatarEntities();
+        hostBroadcastFullState();
+        pushSystemChat(`🚪 ${leftName} saiu do Slam.`);
+      }
+
+      let closeRoomConfirmTimer = null;
+      let closeRoomArmed = false;
+
+      function handleGmCloseRoomClick() {
+        if (!appState.isHost) return;
+        const btn = document.getElementById('btn-gm-close-room');
+        if (!closeRoomArmed) {
+          closeRoomArmed = true;
+          if (btn) {
+            btn.textContent = '⚠️ Confirmar: Desligar Todos Agora?';
+            btn.classList.remove('bg-red-700');
+            btn.classList.add('bg-amber-600');
+          }
+          showToast('Toque novamente em 4s para fechar a sala para todos.');
+          if (closeRoomConfirmTimer) clearTimeout(closeRoomConfirmTimer);
+          closeRoomConfirmTimer = setTimeout(() => {
+            closeRoomArmed = false;
+            if (btn) {
+              btn.textContent = '🚪 Fechar Sala e Desligar Todos';
+              btn.classList.add('bg-red-700');
+              btn.classList.remove('bg-amber-600');
+            }
+          }, 4000);
+          return;
+        }
+
+        if (closeRoomConfirmTimer) clearTimeout(closeRoomConfirmTimer);
+        closeRoomArmed = false;
+        if (btn) {
+          btn.textContent = '🚪 Fechar Sala e Desligar Todos';
+          btn.classList.add('bg-red-700');
+          btn.classList.remove('bg-amber-600');
+        }
+
+        broadcastFromHost({
+          msgId: makeMsgId(),
+          type: 'room_closed',
+          reason: 'O Slammaster (GM) encerrou a sala do Slam.'
+        });
+
+        setTimeout(() => {
+          leaveArenaSession('Sala fechada e todos os participantes desconectados.', true);
+        }, 120);
+      }
+
+      function leaveArenaSession(toastMsg, skipNotifyHost = false) {
+        if (!skipNotifyHost && !appState.isHost && appState.hasEntered) {
+          sendToHost({
+            msgId: makeMsgId(),
+            type: 'leave',
+            uid: localUid,
+            name: appState.localPlayer.name
+          });
+        }
+
+        stopLocalMicrophone();
+
+        if (relayIntervalId) {
+          clearInterval(relayIntervalId);
+          relayIntervalId = null;
+        }
+        if (heartbeatIntervalId) {
+          clearInterval(heartbeatIntervalId);
+          heartbeatIntervalId = null;
+        }
+
+        clientConnections.forEach(conn => {
+          try { conn.close(); } catch (e) {}
+        });
+        clientConnections.clear();
+
+        if (hostConnection) {
+          try { hostConnection.close(); } catch (e) {}
+          hostConnection = null;
+        }
+
+        if (broadcastChannel) {
+          try { broadcastChannel.close(); } catch (e) {}
+          broadcastChannel = null;
+        }
+
+        if (peerInstance) {
+          try { peerInstance.destroy(); } catch (e) {}
+          peerInstance = null;
+        }
+
+        const remoteAudioContainer = document.getElementById('remote-audio-container');
+        if (remoteAudioContainer) remoteAudioContainer.innerHTML = '';
+
+        if (scene) {
+          avatarEntities.forEach(ent => scene.remove(ent.root));
+        }
+        avatarEntities.clear();
+        peerToUidMap.clear();
+        seenMessageIds.clear();
+
+        appState.hasEntered = false;
+        appState.isHost = false;
+        appState.drawerOpen = false;
+        appState.localPlayer.placardRaised = false;
+        appState.localPlayer.onStageApplied = false;
+        appState.localPlayer.isMoving = false;
+        appState.keys = { up: false, down: false, left: false, right: false };
+        appState.joyVec = { x: 0, y: 0 };
+
+        appState.room = {
+          gmUid: null,
+          players: {},
+          juryUids: [],
+          stagePoetUid: null,
+          plazaVoiceOpen: false,
+          mutedUids: [],
+          registrationsOpen: false,
+          registeredPoets: [],
+          drawnOrder: [],
+          currentPoetIndex: -1,
+          timerRunning: false,
+          elapsedSeconds: 0,
+          scoresRevealed: false,
+          officialTotal: null,
+          discardedUids: [],
+          leaderboard: []
+        };
+        appState.chatMessages = [];
+
+        setDrawerOpen(false);
+        const topHud = document.getElementById('top-hud');
+        if (topHud) {
+          topHud.classList.add('hidden');
+          topHud.classList.remove('flex');
+        }
+        document.getElementById('mini-radar-box')?.classList.add('hidden');
+        document.getElementById('virtual-joystick')?.classList.add('hidden');
+        const quickActions = document.getElementById('mobile-quick-actions');
+        if (quickActions) {
+          quickActions.classList.add('hidden');
+          quickActions.classList.remove('flex');
+        }
+        document.getElementById('first-person-reticle')?.classList.add('hidden');
+        document.getElementById('lobby-overlay')?.classList.remove('hidden');
+
+        showToast(toastMsg || 'Você saiu da sala.');
       }
 
       // =========================================================================
@@ -1181,7 +1360,6 @@
           ? roomPrefix
           : `${roomPrefix}-${localUid.toLowerCase()}`;
 
-        // Canal local entre abas do mesmo navegador
         try {
           broadcastChannel = new BroadcastChannel(roomPrefix);
           broadcastChannel.onmessage = (ev) => {
@@ -1223,12 +1401,10 @@
             }
           });
 
-          // Conexões de dados recebidas (GM recebe clientes)
           peerInstance.on('connection', (conn) => {
             setupDataConnection(conn);
           });
 
-          // Chamadas de voz WebRTC recebidas
           peerInstance.on('call', (call) => {
             try {
               call.answer(appState.localAudioStream || undefined);
@@ -1257,7 +1433,6 @@
           if (netStatusEl) netStatusEl.textContent = '🟠 Modo Local';
         }
 
-        // Loop de sincronização contínua (20 Hz world_sync pelo Host + Heartbeat)
         if (relayIntervalId) clearInterval(relayIntervalId);
         relayIntervalId = setInterval(() => {
           if (!appState.hasEntered) return;
@@ -1277,7 +1452,7 @@
             });
             broadcastFromHost({ type: 'world_sync', positions });
           }
-        }, 50); // 20 Hz
+        }, 50);
 
         if (heartbeatIntervalId) clearInterval(heartbeatIntervalId);
         heartbeatIntervalId = setInterval(() => {
@@ -1285,7 +1460,6 @@
           broadcastLocalPosition(true);
         }, 700);
 
-        // Reconexão automática ao voltar de segundo plano no celular
         document.addEventListener('visibilitychange', () => {
           if (document.visibilityState === 'visible' && appState.hasEntered) {
             if (peerInstance && peerInstance.disconnected && !peerInstance.destroyed) {
@@ -1363,16 +1537,10 @@
       function canLocalSpeak() {
         const isMutedByGm = (appState.room.mutedUids || []).includes(localUid);
         if (isMutedByGm) return false;
-
-        // GM sempre pode falar
         if (appState.isHost) return true;
-
-        // Se há um Poeta da Vez no palco, APENAS o poeta (e o GM) podem falar; toda a praça fica mutada
         if (appState.room.stagePoetUid) {
           return appState.room.stagePoetUid === localUid;
         }
-
-        // Sem poeta no palco, fala quem estiver liberado se o GM abriu a voz da praça
         return !!appState.room.plazaVoiceOpen;
       }
 
@@ -1466,13 +1634,11 @@
       }
 
       function enforceVoiceMuteStates() {
-        // Se o jogador local perdeu direito de falar (ex: poeta subiu ao palco ou GM mutou), desliga mic local
         if (appState.micActive && !canLocalSpeak()) {
           stopLocalMicrophone();
           showToast('🔇 Microfone mutado automaticamente (Poeta no palco).');
         }
 
-        // Controla o volume/mute dos elementos <audio> remotos
         const container = document.getElementById('remote-audio-container');
         if (!container) return;
         const stagePoetUid = appState.room.stagePoetUid;
@@ -1489,10 +1655,8 @@
           }
 
           if (stagePoetUid) {
-            // Durante apresentação no palco, apenas o Poeta da Vez e o GM são ouvidos
             audioEl.muted = !(speakerUid === stagePoetUid || speakerUid === gmUid);
           } else {
-            // Fora do palco, ouve se o chat da praça estiver aberto ou se for o GM
             audioEl.muted = !(appState.room.plazaVoiceOpen || speakerUid === gmUid);
           }
         });
@@ -1555,7 +1719,6 @@
         const allUids = Object.keys(appState.room.players);
         if (allUids.length === 0) return;
 
-        // Baixa placas anteriores
         allUids.forEach(uid => {
           appState.room.players[uid].placardRaised = false;
         });
@@ -1591,7 +1754,6 @@
             p.score = Math.round((8.6 + Math.random() * 1.4) * 10) / 10;
             p.placardRaised = true;
           } else {
-            // Para jogadores humanos conectados, levanta a placa com a nota atual escolhida por eles
             if (typeof p.score !== 'number') p.score = 9.5;
             p.placardRaised = true;
           }
@@ -1701,7 +1863,6 @@
         appState.room.officialTotal = null;
         appState.room.discardedUids = [];
 
-        // Baixa plaquinhas e posiciona o poeta no centro do palco
         Object.keys(appState.room.players).forEach(uid => {
           const pl = appState.room.players[uid];
           pl.placardRaised = false;
@@ -1937,7 +2098,6 @@
           }
         });
 
-        // Dispara balão 3D acima do avatar correspondente
         if (uid && avatarEntities.has(uid)) {
           if (uid === localUid && appState.cameraMode === 'first') return;
           triggerAvatarSpeechBubble(avatarEntities.get(uid), text);
@@ -1945,7 +2105,7 @@
       }
 
       // =========================================================================
-      // 8. TEXTURAS PROCEDURAIS (PISO, MADEIRA, CAIXOTE ENCONTRÃO POÉTICO, LED)
+      // 8. TEXTURAS PROCEDURAIS (PISO, MADEIRA, CORETO, CAIXOTE, LED)
       // =========================================================================
       function roundRect(ctx, x, y, w, h, r) {
         ctx.beginPath();
@@ -2005,61 +2165,87 @@
         return tex;
       }
 
-      /**
-       * Textura do Caixote do Encontrão Poético (madeira ripada + estêncil urbano)
-       */
-      function createEncontroPoeticoCrateTexture() {
+      function createClayRoofTexture() {
         const canvas = document.createElement('canvas');
         canvas.width = 512;
-        canvas.height = 256;
+        canvas.height = 512;
         const ctx = canvas.getContext('2d');
 
-        // Ripas horizontais de madeira quente
-        const slatColors = ['#8F5630', '#7E4926', '#9C5F36', '#744221'];
-        for (let i = 0; i < 4; i++) {
-          const y = i * 64;
-          ctx.fillStyle = slatColors[i % slatColors.length];
-          ctx.fillRect(0, y, 512, 61);
-          // Fresta escura entre as ripas
-          ctx.fillStyle = '#2B180C';
-          ctx.fillRect(0, y + 61, 512, 3);
+        ctx.fillStyle = '#8F3F24';
+        ctx.fillRect(0, 0, 512, 512);
+
+        const tileColors = ['#A84B2B', '#964023', '#B85635', '#7F341B'];
+        const cols = 16;
+        const rows = 12;
+        const w = 512 / cols;
+        const h = 512 / rows;
+
+        for (let r = 0; r < rows; r++) {
+          for (let c = 0; c < cols; c++) {
+            ctx.fillStyle = tileColors[(r + c * 2) % tileColors.length];
+            roundRect(ctx, c * w + 1, r * h + 1, w - 2, h - 2, 6);
+            ctx.fill();
+
+            ctx.fillStyle = 'rgba(255, 215, 180, 0.14)';
+            ctx.fillRect(c * w + 3, r * h + 2, w - 6, 3);
+          }
         }
 
-        // Ripas verticais laterais de reforço do caixote
-        ctx.fillStyle = '#5E341A';
-        ctx.fillRect(0, 0, 26, 256);
-        ctx.fillRect(486, 0, 26, 256);
+        const tex = new THREE.CanvasTexture(canvas);
+        tex.wrapS = THREE.RepeatWrapping;
+        tex.wrapT = THREE.RepeatWrapping;
+        tex.repeat.set(4, 2);
+        return tex;
+      }
 
-        // Moldura em estêncil preto/ocre
-        ctx.strokeStyle = '#1B110B';
-        ctx.lineWidth = 6;
-        roundRect(ctx, 42, 24, 428, 208, 16);
-        ctx.stroke();
+      function createCratePlankTexture(wordText) {
+        const canvas = document.createElement('canvas');
+        canvas.width = 512;
+        canvas.height = 148;
+        const ctx = canvas.getContext('2d');
 
-        // Ícone central de microfone/megafone estilizado
-        ctx.fillStyle = '#1B110B';
-        ctx.beginPath();
-        ctx.arc(256, 62, 18, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = '#D99B26';
-        ctx.font = '800 18px Inter, sans-serif';
+        const grad = ctx.createLinearGradient(0, 0, 512, 148);
+        grad.addColorStop(0, '#ABA3B3');
+        grad.addColorStop(0.5, '#B7B0C0');
+        grad.addColorStop(1, '#9E96A6');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, 512, 148);
+
+        for (let i = 0; i < 28; i++) {
+          const y = (i / 28) * 148;
+          ctx.fillStyle = i % 2 === 0 ? 'rgba(72, 62, 74, 0.08)' : 'rgba(245, 240, 248, 0.09)';
+          ctx.fillRect(0, y, 512, 2);
+        }
+
+        ctx.fillStyle = '#332B2E';
+        [
+          [16, 24], [16, 124],
+          [496, 24], [496, 124]
+        ].forEach(([nx, ny]) => {
+          ctx.beginPath();
+          ctx.arc(nx, ny, 4.2, 0, Math.PI * 2);
+          ctx.fill();
+        });
+
+        ctx.save();
+        ctx.translate(256, 78);
+        ctx.scale(0.92, 1.18);
+        ctx.font = '900 74px Inter, sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText('🎤', 256, 63);
 
-        // Tipografia principal em estêncil: ENCONTRÃO POÉTICO
-        ctx.fillStyle = '#1B110B';
-        ctx.font = '800 35px Inter, sans-serif';
-        ctx.fillText('ENCONTRÃO POÉTICO', 256, 118);
+        ctx.lineJoin = 'round';
+        ctx.lineWidth = 9;
+        ctx.strokeStyle = '#3B3232';
+        ctx.strokeText(wordText, 0, 0, 480);
 
-        // Faixa ocre inferior: SLAM NO CAIXOTE
-        ctx.fillStyle = '#D99B26';
-        roundRect(ctx, 116, 152, 280, 42, 10);
-        ctx.fill();
+        ctx.fillStyle = '#A34737';
+        ctx.fillText(wordText, 0, 0, 480);
 
-        ctx.fillStyle = '#1B110B';
-        ctx.font = '800 20px "JetBrains Mono", monospace';
-        ctx.fillText('SLAM NO CAIXOTE', 256, 174);
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = 'rgba(225, 218, 228, 0.45)';
+        ctx.strokeText(wordText, 0, 0, 480);
+        ctx.restore();
 
         const tex = new THREE.CanvasTexture(canvas);
         tex.needsUpdate = true;
@@ -2591,7 +2777,6 @@
         if (!threeReady || !scene) return;
         const players = appState.room.players || {};
 
-        // Remove entidades de quem saiu
         avatarEntities.forEach((ent, uid) => {
           if (!players[uid] && uid !== localUid) {
             scene.remove(ent.root);
@@ -2599,7 +2784,6 @@
           }
         });
 
-        // Cria ou atualiza entidades
         const allUids = new Set([localUid, ...Object.keys(players)]);
         allUids.forEach(uid => {
           const data = uid === localUid ? appState.localPlayer : players[uid];
@@ -2626,7 +2810,6 @@
             avatarEntities.set(uid, ent);
           }
 
-          // Atualiza aparência e crachá se mudou
           ent.skinMat.color.set(data.skin || '#8D5534');
           ent.outfitMat.color.set(data.outfit || '#C85A32');
           if (ent.lastRoleBadge !== roleBadge) {
@@ -2676,7 +2859,7 @@
       }
 
       // =========================================================================
-      // 11. MONTAGEM DA CENA 3D (PRAÇA, CAIXOTE ENCONTRÃO POÉTICO, PALCO)
+      // 11. MONTAGEM DA CENA 3D (PRAÇA, CORETO, CAIXOTE ENCONTRÃO POÉTICO, PALCO)
       // =========================================================================
       function initScene() {
         try {
@@ -2725,6 +2908,7 @@
           scene.add(stageSpot, stageSpot.target);
 
           buildUrbanPlaza();
+          buildBandstandCoreto();
           buildPoeticCrate();
           buildSlamStage();
           buildFestoonLights();
@@ -2766,10 +2950,10 @@
         const ironMat = new THREE.MeshStandardMaterial({ color: '#1C1714', metalness: 0.5, roughness: 0.5 });
 
         [
-          { x: -11, z: -1.5, rot: Math.PI / 3 },
-          { x: 11, z: -1.5, rot: -Math.PI / 3 },
-          { x: -9.5, z: 6.5, rot: Math.PI / 5 },
-          { x: 9.5, z: 6.5, rot: -Math.PI / 5 }
+          { x: -11, z: -2.5, rot: Math.PI / 3 },
+          { x: -10.5, z: 6.5, rot: Math.PI / 5 },
+          { x: -6.5, z: 10.5, rot: Math.PI / 8 },
+          { x: 6.5, z: 11.5, rot: -Math.PI / 8 }
         ].forEach(b => {
           const bench = new THREE.Group();
           bench.position.set(b.x, 0, b.z);
@@ -2789,47 +2973,318 @@
       }
 
       /**
-       * Constrói o Caixote do Encontrão Poético no centro da roda da praça (z = -3.4)
+       * Constrói o Coreto da Praça (inspirado na foto enviada):
+       * Base decagonal creme, núcleo fechado com janelas superiores, 10 colunas inferiores,
+       * escadaria lateral caminhável, balaustrada torneada, treliças internas e telhado de barro.
+       */
+      function buildBandstandCoreto() {
+        const coreto = new THREE.Group();
+        coreto.position.set(12.8, 0, 1.5);
+
+        const creamMat = new THREE.MeshStandardMaterial({ color: '#EDE3D0', roughness: 0.82 });
+        const warmPlasterMat = new THREE.MeshStandardMaterial({ color: '#DFD2BC', roughness: 0.86 });
+        const darkWindowMat = new THREE.MeshStandardMaterial({ color: '#261D17', roughness: 0.5 });
+        const trussMat = new THREE.MeshStandardMaterial({ color: '#394D47', roughness: 0.75 });
+        const roofMat = new THREE.MeshStandardMaterial({
+          map: createClayRoofTexture(),
+          roughness: 0.78,
+          side: THREE.DoubleSide
+        });
+        const ridgeMat = new THREE.MeshStandardMaterial({ color: '#8A391E', roughness: 0.7 });
+
+        const sides = 10;
+
+        // 1. Degrau/calçada decagonal de base
+        const plinth = new THREE.Mesh(new THREE.CylinderGeometry(4.65, 4.78, 0.22, sides), creamMat);
+        plinth.position.y = 0.11;
+        plinth.receiveShadow = true;
+        coreto.add(plinth);
+
+        // 2. Núcleo interno fechado do térreo + janelinhas superiores
+        const innerCore = new THREE.Mesh(new THREE.CylinderGeometry(3.32, 3.38, 2.05, sides), warmPlasterMat);
+        innerCore.position.y = 1.12;
+        innerCore.castShadow = true;
+        innerCore.receiveShadow = true;
+        coreto.add(innerCore);
+
+        for (let i = 0; i < sides; i++) {
+          const ang = (i / sides) * Math.PI * 2;
+          if (Math.abs(Math.sin(ang)) < 0.35 && Math.cos(ang) < 0) continue;
+          const win = new THREE.Mesh(new THREE.BoxGeometry(0.46, 0.32, 0.14), darkWindowMat);
+          win.position.set(Math.cos(ang) * 3.31, 1.78, Math.sin(ang) * 3.31);
+          win.rotation.y = -ang + Math.PI / 2;
+          coreto.add(win);
+        }
+
+        // 3. Mureta baixa perimetral e 10 colunas clássicas inferiores
+        const lowerCurb = new THREE.Mesh(new THREE.CylinderGeometry(4.25, 4.3, 0.38, sides), creamMat);
+        lowerCurb.position.y = 0.36;
+        lowerCurb.receiveShadow = true;
+        coreto.add(lowerCurb);
+
+        const colRadius = 4.18;
+        for (let i = 0; i < sides; i++) {
+          const ang = (i / sides) * Math.PI * 2;
+          const cx = Math.cos(ang) * colRadius;
+          const cz = Math.sin(ang) * colRadius;
+
+          const lowCol = new THREE.Group();
+          lowCol.position.set(cx, 0.22, cz);
+          const baseBlock = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.32, 0.42), creamMat);
+          baseBlock.position.y = 0.16;
+          const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.17, 1.52, 12), creamMat);
+          shaft.position.y = 1.05;
+          shaft.castShadow = true;
+          const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.16, 0.18, 12), creamMat);
+          cap.position.y = 1.85;
+          lowCol.add(baseBlock, shaft, cap);
+          coreto.add(lowCol);
+        }
+
+        // 4. Escadaria lateral externa (lado -X voltado para o centro da praça)
+        const stairSteps = 7;
+        for (let s = 0; s < stairSteps; s++) {
+          const t = (s + 1) / stairSteps;
+          const stepH = t * 2.15;
+          const stepX = -5.7 + s * 0.26;
+          const stepMesh = new THREE.Mesh(new THREE.BoxGeometry(0.32, stepH, 1.45), creamMat);
+          stepMesh.position.set(stepX, stepH / 2, 0);
+          stepMesh.castShadow = true;
+          stepMesh.receiveShadow = true;
+          coreto.add(stepMesh);
+        }
+        [-0.78, 0.78].forEach(zOff => {
+          const railWall = new THREE.Mesh(new THREE.BoxGeometry(1.95, 0.65, 0.14), creamMat);
+          railWall.position.set(-4.85, 1.25, zOff);
+          railWall.rotation.z = 0.78;
+          railWall.castShadow = true;
+          coreto.add(railWall);
+        });
+
+        // 5. Laje sacada superior (y = 2.15)
+        const upperDeck = new THREE.Mesh(new THREE.CylinderGeometry(4.56, 4.56, 0.24, sides), creamMat);
+        upperDeck.position.y = 2.12;
+        upperDeck.castShadow = true;
+        upperDeck.receiveShadow = true;
+        coreto.add(upperDeck);
+
+        // 6. Balaustrada clássica superior + 10 colunas altas do pavilhão
+        for (let i = 0; i < sides; i++) {
+          const ang1 = (i / sides) * Math.PI * 2;
+          const ang2 = ((i + 1) / sides) * Math.PI * 2;
+          const x1 = Math.cos(ang1) * colRadius;
+          const z1 = Math.sin(ang1) * colRadius;
+          const x2 = Math.cos(ang2) * colRadius;
+          const z2 = Math.sin(ang2) * colRadius;
+
+          const upCol = new THREE.Group();
+          upCol.position.set(x1, 2.24, z1);
+          const ped = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.78, 0.36), creamMat);
+          ped.position.y = 0.39;
+          const upShaft = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.16, 1.62, 12), creamMat);
+          upShaft.position.y = 1.56;
+          upShaft.castShadow = true;
+          const upCap = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.15, 0.18, 12), creamMat);
+          upCap.position.y = 2.42;
+          upCol.add(ped, upShaft, upCap);
+          coreto.add(upCol);
+
+          const midAng = (ang1 + ang2) / 2;
+          if (Math.cos(midAng) < -0.85) continue;
+
+          const segLen = Math.hypot(x2 - x1, z2 - z1);
+          const segYaw = -Math.atan2(z2 - z1, x2 - x1);
+          const mx = (x1 + x2) / 2;
+          const mz = (z1 + z2) / 2;
+
+          const topRail = new THREE.Mesh(new THREE.BoxGeometry(segLen, 0.11, 0.22), creamMat);
+          topRail.position.set(mx, 2.98, mz);
+          topRail.rotation.y = segYaw;
+
+          const botRail = new THREE.Mesh(new THREE.BoxGeometry(segLen, 0.11, 0.22), creamMat);
+          botRail.position.set(mx, 2.3, mz);
+          botRail.rotation.y = segYaw;
+          coreto.add(topRail, botRail);
+
+          for (let b = 1; b <= 3; b++) {
+            const bt = b / 4;
+            const bx = x1 + (x2 - x1) * bt;
+            const bz = z1 + (z2 - z1) * bt;
+            const baluster = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.075, 0.62, 8), creamMat);
+            baluster.position.set(bx, 2.64, bz);
+            coreto.add(baluster);
+          }
+        }
+
+        // 7. Viga anelar e treliças internas expostas sob o telhado
+        const ringBeam = new THREE.Mesh(new THREE.CylinderGeometry(4.36, 4.36, 0.26, sides), creamMat);
+        ringBeam.position.y = 4.76;
+        coreto.add(ringBeam);
+
+        const kingPost = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 1.55, 8), trussMat);
+        kingPost.position.y = 5.45;
+        coreto.add(kingPost);
+
+        for (let i = 0; i < sides; i++) {
+          const ang = (i / sides) * Math.PI * 2;
+          const rafter = new THREE.Mesh(new THREE.BoxGeometry(4.3, 0.1, 0.1), trussMat);
+          rafter.position.set(Math.cos(ang) * 2.1, 4.82, Math.sin(ang) * 2.1);
+          rafter.rotation.y = -ang;
+          coreto.add(rafter);
+        }
+
+        // 8. Telhado cônico decagonal em telhas de barro terracota
+        const roofCone = new THREE.Mesh(new THREE.ConeGeometry(4.92, 1.65, sides, 1, true), roofMat);
+        roofCone.position.y = 5.65;
+        roofCone.castShadow = true;
+        coreto.add(roofCone);
+
+        for (let i = 0; i < sides; i++) {
+          const ang = (i / sides) * Math.PI * 2 + Math.PI / sides;
+          const hip = new THREE.Mesh(new THREE.BoxGeometry(5.15, 0.11, 0.13), ridgeMat);
+          hip.position.set(Math.cos(ang) * 2.45, 5.65, Math.sin(ang) * 2.45);
+          hip.rotation.y = -ang;
+          hip.rotation.z = -0.32;
+          coreto.add(hip);
+        }
+
+        const finial = new THREE.Mesh(new THREE.SphereGeometry(0.18, 10, 10), ridgeMat);
+        finial.position.y = 6.52;
+        coreto.add(finial);
+
+        scene.add(coreto);
+      }
+
+      /**
+       * Constrói o Caixote do Encontrão Poético fiel à foto enviada:
+       * Duas tábuas horizontais separadas por fresta ("ENCONTRÃO" em cima, "POÉTICO" embaixo),
+       * 4 pezinhos de madeira e 3 pilhas de livros/zines em 3D sobre a tampa.
        */
       function buildPoeticCrate() {
-        const crateFrontTex = createEncontroPoeticoCrateTexture();
-        const crateTopMat = new THREE.MeshStandardMaterial({
-          map: createWoodPlankTexture(),
-          color: '#A96B3D',
-          roughness: 0.75
+        const crateGroup = new THREE.Group();
+        crateGroup.position.set(0, 0, -3.4);
+
+        const topPlankMat = new THREE.MeshStandardMaterial({
+          map: createCratePlankTexture('ENCONTRÃO'),
+          roughness: 0.78
         });
-        const crateLogoMat = new THREE.MeshStandardMaterial({
-          map: crateFrontTex,
-          roughness: 0.7
+        const bottomPlankMat = new THREE.MeshStandardMaterial({
+          map: createCratePlankTexture('POÉTICO'),
+          roughness: 0.78
+        });
+        const paintedWoodMat = new THREE.MeshStandardMaterial({
+          color: '#A8A0B0',
+          roughness: 0.82
+        });
+        const lidRimMat = new THREE.MeshStandardMaterial({
+          color: '#7D746D',
+          roughness: 0.85
         });
 
-        // Ordem de faces do BoxGeometry: [+X, -X, +Y (topo), -Y (base), +Z (frente), -Z (verso)]
-        const materials = [
-          crateLogoMat,
-          crateLogoMat,
-          crateTopMat,
-          crateTopMat,
-          crateLogoMat,
-          crateLogoMat
+        const W = 1.96;
+        const D = 1.16;
+
+        // 1. Quatro pezinhos verticais nos cantos (y: 0 -> 0.74)
+        const legGeo = new THREE.BoxGeometry(0.11, 0.74, 0.11);
+        [
+          [-W / 2 + 0.06, -D / 2 + 0.06],
+          [W / 2 - 0.06, -D / 2 + 0.06],
+          [-W / 2 + 0.06, D / 2 - 0.06],
+          [W / 2 - 0.06, D / 2 - 0.06]
+        ].forEach(([lx, lz]) => {
+          const leg = new THREE.Mesh(legGeo, paintedWoodMat);
+          leg.position.set(lx, 0.37, lz);
+          leg.castShadow = true;
+          leg.receiveShadow = true;
+          crateGroup.add(leg);
+        });
+
+        // 2. Tábuas frontais e traseiras com fresta central aberta
+        const plankGeo = new THREE.BoxGeometry(W, 0.27, 0.05);
+
+        const frontTopPlank = new THREE.Mesh(plankGeo, topPlankMat);
+        frontTopPlank.position.set(0, 0.58, D / 2);
+        frontTopPlank.castShadow = true;
+        frontTopPlank.receiveShadow = true;
+
+        const frontBotPlank = new THREE.Mesh(plankGeo, bottomPlankMat);
+        frontBotPlank.position.set(0, 0.25, D / 2);
+        frontBotPlank.castShadow = true;
+        frontBotPlank.receiveShadow = true;
+
+        const backTopPlank = new THREE.Mesh(plankGeo, topPlankMat);
+        backTopPlank.position.set(0, 0.58, -D / 2);
+        backTopPlank.rotation.y = Math.PI;
+        backTopPlank.castShadow = true;
+
+        const backBotPlank = new THREE.Mesh(plankGeo, bottomPlankMat);
+        backBotPlank.position.set(0, 0.25, -D / 2);
+        backBotPlank.rotation.y = Math.PI;
+        backBotPlank.castShadow = true;
+
+        crateGroup.add(frontTopPlank, frontBotPlank, backTopPlank, backBotPlank);
+
+        // 3. Ripas laterais esquerda e direita com fresta correspondente
+        const sidePlankGeo = new THREE.BoxGeometry(0.05, 0.27, D - 0.04);
+        [-W / 2, W / 2].forEach(sx => {
+          const sTop = new THREE.Mesh(sidePlankGeo, paintedWoodMat);
+          sTop.position.set(sx, 0.58, 0);
+          const sBot = new THREE.Mesh(sidePlankGeo, paintedWoodMat);
+          sBot.position.set(sx, 0.25, 0);
+          crateGroup.add(sTop, sBot);
+        });
+
+        // 4. Tampa superior cinza-madeira desgastada (y = 0.75)
+        const topLid = new THREE.Mesh(new THREE.BoxGeometry(W + 0.06, 0.07, D + 0.06), lidRimMat);
+        topLid.position.set(0, 0.75, 0);
+        topLid.castShadow = true;
+        topLid.receiveShadow = true;
+        crateGroup.add(topLid);
+
+        // 5. Três pilhas de livros e zines poéticos em cima do caixote
+        const pagesMat = new THREE.MeshStandardMaterial({ color: '#CBC5D1', roughness: 0.7 });
+        const coverBrownMat = new THREE.MeshStandardMaterial({ color: '#7D4234', roughness: 0.75 });
+        const coverTerraMat = new THREE.MeshStandardMaterial({ color: '#A34737', roughness: 0.75 });
+
+        function addBook(x, y, z, bw, bh, bd, rotY, rotZ, coverMat) {
+          const book = new THREE.Group();
+          book.position.set(x, y, z);
+          book.rotation.set(0, rotY, rotZ);
+
+          const pages = new THREE.Mesh(new THREE.BoxGeometry(bw, bh, bd), pagesMat);
+          pages.castShadow = true;
+          const topCover = new THREE.Mesh(new THREE.BoxGeometry(bw + 0.015, 0.008, bd + 0.015), coverMat);
+          topCover.position.y = bh / 2 + 0.003;
+          book.add(pages, topCover);
+          crateGroup.add(book);
+        }
+
+        // Pilha esquerda
+        addBook(-0.62, 0.805, 0.04, 0.52, 0.032, 0.38, 0.08, 0, coverBrownMat);
+        addBook(-0.65, 0.842, 0.02, 0.48, 0.026, 0.36, -0.06, 0.04, coverTerraMat);
+
+        // Pilha central alta (7 livros empilhados)
+        const centerBooks = [
+          { y: 0.812, w: 0.54, h: 0.048, d: 0.42, ry: 0.04, mat: coverBrownMat },
+          { y: 0.858, w: 0.58, h: 0.036, d: 0.44, ry: -0.07, mat: coverTerraMat },
+          { y: 0.892, w: 0.52, h: 0.032, d: 0.40, ry: 0.05, mat: coverBrownMat },
+          { y: 0.924, w: 0.55, h: 0.030, d: 0.41, ry: -0.04, mat: coverTerraMat },
+          { y: 0.955, w: 0.49, h: 0.028, d: 0.38, ry: 0.09, mat: coverBrownMat },
+          { y: 0.985, w: 0.53, h: 0.030, d: 0.39, ry: -0.05, mat: coverTerraMat },
+          { y: 1.015, w: 0.47, h: 0.028, d: 0.36, ry: 0.06, mat: coverBrownMat }
         ];
+        centerBooks.forEach(b => addBook(-0.02, b.y, 0.02, b.w, b.h, b.d, b.ry, 0, b.mat));
 
-        const crateMesh = new THREE.Mesh(new THREE.BoxGeometry(2.1, 0.56, 1.45), materials);
-        crateMesh.position.set(0, 0.28, -3.4);
-        crateMesh.castShadow = true;
-        crateMesh.receiveShadow = true;
-        scene.add(crateMesh);
+        // Pilha direita
+        addBook(0.62, 0.806, 0.05, 0.52, 0.036, 0.38, -0.05, 0, coverBrownMat);
+        addBook(0.60, 0.848, 0.04, 0.50, 0.024, 0.36, 0.07, -0.09, coverTerraMat);
 
-        // Cantoneiras de madeira reforçada no topo do caixote
-        const rimMat = new THREE.MeshStandardMaterial({ color: '#4A2814', roughness: 0.85 });
-        const rimFront = new THREE.Mesh(new THREE.BoxGeometry(2.14, 0.06, 0.08), rimMat);
-        rimFront.position.set(0, 0.56, -2.68);
-        const rimBack = rimFront.clone();
-        rimBack.position.set(0, 0.56, -4.12);
-        scene.add(rimFront, rimBack);
+        scene.add(crateGroup);
       }
 
       function buildSlamStage() {
-        const deckMat = new THREE.MeshStandardMaterial({ map: createWoodPlankTexture(), roughness: 0.72 });
+        const woodTex = createWoodPlankTexture();
+        const deckMat = new THREE.MeshStandardMaterial({ map: woodTex, roughness: 0.72 });
         const trimMat = new THREE.MeshStandardMaterial({
           color: '#D99B26',
           emissive: '#C85A32',
@@ -2848,7 +3303,7 @@
         frontTrim.position.set(0, 0.86, -8.0);
         scene.add(frontTrim);
 
-        // Rampa lateral esquerda do palco
+        // Rampa de Acesso à Esquerda do Palco
         const rampLength = Math.hypot(3.2, 0.9);
         const rampAngle = Math.atan2(0.9, 3.2);
         const rampMesh = new THREE.Mesh(new THREE.BoxGeometry(rampLength, 0.16, 4.0), deckMat);
@@ -2858,9 +3313,10 @@
         rampMesh.receiveShadow = true;
         scene.add(rampMesh);
 
-        // Microfone central no palco
+        // Pedestal e Microfone no Centro do Palco
         const micGroup = new THREE.Group();
         micGroup.position.set(0, 0.9, -9.3);
+
         const base = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.28, 0.05, 16), darkMetal);
         base.position.y = 0.025;
         const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.025, 1.38, 10), darkMetal);
@@ -2871,31 +3327,54 @@
         );
         micHead.position.set(0, 1.42, 0.06);
         micHead.rotation.x = 0.35;
+
         micGroup.add(base, pole, micHead);
         scene.add(micGroup);
 
-        // Caixas de Som PA laterais
+        [-1.8, 1.8].forEach(wx => {
+          const wedge = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.34, 0.52), darkMetal);
+          wedge.position.set(wx, 1.05, -8.55);
+          wedge.rotation.x = -0.35;
+          wedge.castShadow = true;
+          scene.add(wedge);
+        });
+
+        // Torres de Caixas de Som (PA)
         const coneMat = new THREE.MeshStandardMaterial({ color: '#332721', roughness: 0.6 });
-        [-7.2, 7.3].forEach((xPos, idx) => {
+        [-7.2, 7.2].forEach((sx, idx) => {
+          const xPos = idx === 0 ? -7.2 : 7.3;
+          const zPos = idx === 0 ? -8.2 : -9.8;
           const stack = new THREE.Group();
-          stack.position.set(xPos, 0, idx === 0 ? -8.2 : -9.8);
+          stack.position.set(xPos, 0, zPos);
           stack.rotation.y = idx === 0 ? 0.25 : -0.25;
+
           const sub = new THREE.Mesh(new THREE.BoxGeometry(1.35, 1.45, 1.25), darkMetal);
           sub.position.y = 0.725;
+          sub.castShadow = true;
+
           const topBox = new THREE.Mesh(new THREE.BoxGeometry(1.15, 1.25, 1.05), darkMetal);
           topBox.position.y = 2.1;
+          topBox.castShadow = true;
+
           const cone1 = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.32, 0.08, 18), coneMat);
           cone1.rotation.x = Math.PI / 2;
           cone1.position.set(0, 0.72, 0.62);
-          speakerCones.push(cone1);
-          stack.add(sub, topBox, cone1);
+
+          const cone2 = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.22, 0.08, 18), coneMat);
+          cone2.rotation.x = Math.PI / 2;
+          cone2.position.set(0, 2.1, 0.52);
+
+          speakerCones.push(cone1, cone2);
+          stack.add(sub, topBox, cone1, cone2);
           scene.add(stack);
         });
 
-        // Telão LED
+        // Telão LED Dinâmico atrás do Palco
         initLedScreenCanvas();
+
         const screenFrame = new THREE.Mesh(new THREE.BoxGeometry(9.6, 5.0, 0.35), darkMetal);
         screenFrame.position.set(0, 3.65, -14.3);
+        screenFrame.castShadow = true;
         scene.add(screenFrame);
 
         const screenMat = new THREE.MeshStandardMaterial({
@@ -2908,6 +3387,12 @@
         const screenPlane = new THREE.Mesh(new THREE.PlaneGeometry(9.1, 4.55), screenMat);
         screenPlane.position.set(0, 3.65, -14.11);
         scene.add(screenPlane);
+
+        [-4.2, 4.2].forEach(px => {
+          const pillar = new THREE.Mesh(new THREE.BoxGeometry(0.35, 5.2, 0.35), darkMetal);
+          pillar.position.set(px, 2.6, -14.35);
+          scene.add(pillar);
+        });
       }
 
       function buildFestoonLights() {
@@ -2927,38 +3412,52 @@
         postCoords.forEach(p => {
           const post = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.18, 6.4, 8), postMat);
           post.position.set(p.x, 3.2, p.z);
+          post.castShadow = true;
           scene.add(post);
         });
 
-        [
+        const spans = [
           [postCoords[0], postCoords[3]],
           [postCoords[1], postCoords[2]],
           [postCoords[2], postCoords[5]],
           [postCoords[3], postCoords[4]],
           [postCoords[2], postCoords[3]]
-        ].forEach(([a, b]) => {
+        ];
+
+        spans.forEach(([a, b]) => {
           const start = new THREE.Vector3(a.x, 6.1, a.z);
           const end = new THREE.Vector3(b.x, 6.1, b.z);
           const mid = start.clone().lerp(end, 0.5);
           mid.y -= 1.25;
-          const curve = new THREE.CatmullRomCurve3([start, mid, end]);
-          scene.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 20, 0.025, 5, false), wireMat));
 
-          for (let i = 1; i < 9; i++) {
-            const pt = curve.getPoint(i / 9);
-            const bulb = new THREE.Mesh(bulbGeo, new THREE.MeshBasicMaterial({ color: 0xffd275 }));
+          const curve = new THREE.CatmullRomCurve3([start, mid, end]);
+          const wireGeo = new THREE.TubeGeometry(curve, 20, 0.025, 5, false);
+          scene.add(new THREE.Mesh(wireGeo, wireMat));
+
+          const bulbCount = 9;
+          for (let i = 1; i < bulbCount; i++) {
+            const t = i / bulbCount;
+            const pt = curve.getPoint(t);
+            const bulbMat = new THREE.MeshBasicMaterial({ color: 0xffd275 });
+            const bulb = new THREE.Mesh(bulbGeo, bulbMat);
             bulb.position.copy(pt);
             bulb.position.y -= 0.16;
             scene.add(bulb);
             festoonBulbs.push({ mesh: bulb, phase: Math.random() * Math.PI * 2 });
           }
         });
+
+        const pLight1 = new THREE.PointLight(0xffb347, 0.85, 22);
+        pLight1.position.set(-6, 5.2, 2);
+        const pLight2 = new THREE.PointLight(0xff9f45, 0.85, 22);
+        pLight2.position.set(6, 5.2, 2);
+        scene.add(pLight1, pLight2);
       }
 
       // =========================================================================
-      // 12. FÍSICA DE SUPERFÍCIE (PALCO, RAMPA E CAIXOTE DO ENCONTRÃO POÉTICO)
+      // 12. FÍSICA DE SUPERFÍCIE (PALCO, RAMPA, CAIXOTE E CORETO CAMINHÁVEL)
       // =========================================================================
-      function getSurfaceHeightAt(x, z) {
+      function getSurfaceHeightAt(x, z, currentY = 0) {
         // Palco principal (Y = 0.9)
         if (x >= -5.8 && x <= 5.8 && z >= -14.8 && z <= -8.2) {
           return 0.9;
@@ -2968,9 +3467,19 @@
           const t = (x - (-9.2)) / 3.4;
           return Math.max(0, Math.min(0.9, t * 0.9));
         }
-        // Caixote do Encontrão Poético (x: [-1.05, 1.05], z: [-4.12, -2.68], altura: 0.56)
-        if (x >= -1.05 && x <= 1.05 && z >= -4.12 && z <= -2.68) {
-          return 0.56;
+        // Caixote do Encontrão Poético (x: [-0.98, 0.98], z: [-3.98, -2.82], altura: 0.78)
+        if (x >= -0.98 && x <= 0.98 && z >= -3.98 && z <= -2.82) {
+          return 0.78;
+        }
+        // Escada do Coreto (centro em x = 12.8, z = 1.5; escada de x = 7.0 a 8.95)
+        if (x >= 7.0 && x <= 8.95 && z >= 0.72 && z <= 2.28) {
+          const t = (x - 7.0) / 1.95;
+          return Math.max(0, Math.min(2.24, t * 2.24));
+        }
+        // Deck superior do Coreto (raio 4.35 ao redor de 12.8, 1.5)
+        const distCoreto = Math.hypot(x - 12.8, z - 1.5);
+        if (distCoreto <= 4.35 && currentY >= 1.55) {
+          return 2.24;
         }
         return 0;
       }
@@ -2996,10 +3505,12 @@
 
           const nextX = Math.max(-23.5, Math.min(23.5, lp.x + dirX * speed * dt));
           const nextZ = Math.max(-22.5, Math.min(23.5, lp.z + dirZ * speed * dt));
-          const targetH = getSurfaceHeightAt(nextX, nextZ);
+          const targetH = getSurfaceHeightAt(nextX, nextZ, lp.y);
 
-          // Permite subir degrau do caixote (0.56) e rampa suavemente
-          if (targetH - lp.y <= 0.62) {
+          const distCoretoNext = Math.hypot(nextX - 12.8, nextZ - 1.5);
+          const blockedByCoretoBase = lp.y < 1.55 && distCoretoNext < 3.55;
+
+          if (!blockedByCoretoBase && targetH - lp.y <= 0.84) {
             lp.x = nextX;
             lp.z = nextZ;
             lp.y += (targetH - lp.y) * Math.min(1, dt * 14);
@@ -3013,7 +3524,7 @@
             lp.rotY += diff * Math.min(1, dt * 12);
           }
         } else {
-          const groundY = getSurfaceHeightAt(lp.x, lp.z);
+          const groundY = getSurfaceHeightAt(lp.x, lp.z, lp.y);
           lp.y += (groundY - lp.y) * Math.min(1, dt * 14);
         }
 
@@ -3023,87 +3534,159 @@
 
         lp.isMoving = moving;
         if (appState.room.players[localUid]) {
-          Object.assign(appState.room.players[localUid], lp);
+          appState.room.players[localUid].x = lp.x;
+          appState.room.players[localUid].y = lp.y;
+          appState.room.players[localUid].z = lp.z;
+          appState.room.players[localUid].rotY = lp.rotY;
+          appState.room.players[localUid].isMoving = moving;
         }
 
-        // Envia atualização em tempo real a 30 Hz
         broadcastLocalPosition(false);
 
-        const localEnt = avatarEntities.get(localUid);
-        if (localEnt) {
-          localEnt.root.position.set(lp.x, lp.y, lp.z);
-          localEnt.root.rotation.y = lp.rotY;
-          animateAvatarBody(localEnt, moving, lp.placardRaised, false, dt, 0);
+        if (!threeReady || !camera) return;
+
+        if (appState.cameraMode === 'first') {
+          camera.position.set(lp.x, lp.y + 1.65, lp.z);
+          const cosPitch = Math.cos(appState.cameraPitch);
+          const lookTarget = new THREE.Vector3(
+            camera.position.x - Math.sin(appState.cameraYaw) * cosPitch,
+            camera.position.y - Math.sin(appState.cameraPitch),
+            camera.position.z - Math.cos(appState.cameraYaw) * cosPitch
+          );
+          camera.lookAt(lookTarget);
+        } else {
+          const targetFocus = new THREE.Vector3(lp.x, lp.y + 1.65, lp.z);
+          const horizDist = appState.cameraDistance * Math.cos(appState.cameraPitch);
+          const vertDist = appState.cameraDistance * Math.sin(appState.cameraPitch);
+          const desiredCamPos = new THREE.Vector3(
+            targetFocus.x + Math.sin(appState.cameraYaw) * horizDist,
+            Math.max(0.85, targetFocus.y + vertDist),
+            targetFocus.z + Math.cos(appState.cameraYaw) * horizDist
+          );
+          camera.position.lerp(desiredCamPos, Math.min(1, dt * 11));
+          camera.lookAt(targetFocus);
         }
       }
 
-      function updateRemoteAvatars(dt) {
-        const players = appState.room.players || {};
-        Object.keys(players).forEach((uid, idx) => {
-          if (uid === localUid) return;
-          const p = players[uid];
-          const ent = avatarEntities.get(uid);
-          if (!p || !ent) return;
+      // =========================================================================
+      // 13. LOOP DE ANIMAÇÃO 3D, INTERPOLAÇÃO MULTIPLAYER E MINI-RADAR
+      // =========================================================================
+      let lastSecondTick = -1;
 
-          const tx = typeof p.targetX === 'number' ? p.targetX : p.x;
-          const ty = typeof p.targetY === 'number' ? p.targetY : p.y;
-          const tz = typeof p.targetZ === 'number' ? p.targetZ : p.z;
-          const tRot = typeof p.targetRotY === 'number' ? p.targetRotY : p.rotY;
+      function animate() {
+        requestAnimationFrame(animate);
+        if (!clock) return;
 
-          const lerpFactor = Math.min(1, dt * 16);
-          p.x += (tx - p.x) * lerpFactor;
-          p.y += (ty - p.y) * lerpFactor;
-          p.z += (tz - p.z) * lerpFactor;
+        const dt = Math.min(clock.getDelta(), 0.05);
+        const elapsed = clock.getElapsedTime();
 
-          let diff = tRot - p.rotY;
-          while (diff > Math.PI) diff -= Math.PI * 2;
-          while (diff < -Math.PI) diff += Math.PI * 2;
-          p.rotY += diff * lerpFactor;
-
-          ent.root.position.set(p.x, p.y, p.z);
-          ent.root.rotation.y = p.rotY;
-
-          const isOnStage = appState.room.stagePoetUid === uid;
-          const distToTarget = Math.hypot(tx - p.x, tz - p.z);
-          const isWalking = p.isMoving || distToTarget > 0.04;
-          animateAvatarBody(ent, isWalking, !!p.placardRaised, isOnStage, dt, idx * 0.9);
-        });
-      }
-
-      function animateAvatarBody(ent, isMoving, placardRaised, isOnStage, dt, phaseOffset) {
-        const time = clock ? clock.getElapsedTime() : performance.now() * 0.001;
-
-        if (isOnStage) {
-          const beat = time * 4.4;
-          ent.torsoGroup.rotation.z = Math.sin(beat * 0.5) * 0.08;
-          ent.torsoGroup.rotation.x = 0.08 + Math.sin(beat) * 0.05;
-          ent.rightArmGroup.rotation.x = -0.85 + Math.sin(beat * 1.4) * 0.45;
-          ent.leftArmGroup.rotation.x = -0.65 + Math.cos(beat * 1.2) * 0.35;
-        } else if (isMoving) {
-          const stride = Math.sin(time * 11 + phaseOffset) * 0.65;
-          ent.leftLegGroup.rotation.x = stride;
-          ent.rightLegGroup.rotation.x = -stride;
-          ent.leftArmGroup.rotation.x = -stride * 0.6;
-          if (!placardRaised) ent.rightArmGroup.rotation.x = stride * 0.6;
-          ent.torsoGroup.position.y = 1.18 + Math.abs(Math.cos(time * 11)) * 0.04;
-        } else {
-          ent.leftLegGroup.rotation.x *= 0.82;
-          ent.rightLegGroup.rotation.x *= 0.82;
-          ent.leftArmGroup.rotation.x = Math.sin(time * 2.2 + phaseOffset) * 0.05;
-          if (!placardRaised) ent.rightArmGroup.rotation.x = -Math.sin(time * 2.2 + phaseOffset) * 0.05;
-          ent.torsoGroup.position.y = 1.18 + Math.sin(time * 2.5 + phaseOffset) * 0.015;
+        // Cronômetro oficial
+        if (appState.room.timerRunning) {
+          appState.room.elapsedSeconds += dt;
+          const wholeSec = Math.floor(appState.room.elapsedSeconds);
+          if (wholeSec !== lastSecondTick) {
+            lastSecondTick = wholeSec;
+            updateTimerDisplays();
+            updateLedScreenTexture();
+            if (appState.isHost) hostBroadcastFullState();
+          }
         }
 
-        const targetP = placardRaised ? 1 : 0;
-        ent.placardProgress += (targetP - ent.placardProgress) * Math.min(1, dt * 10);
-        if (ent.placardProgress > 0.02) {
-          ent.placardGroup.visible = true;
-          ent.rightArmGroup.rotation.x = -ent.placardProgress * 2.85;
-          ent.rightArmGroup.rotation.z = -ent.placardProgress * 0.14;
-        } else {
-          ent.placardGroup.visible = false;
-          ent.rightArmGroup.rotation.z = 0;
+        updateLocalMovementAndCamera(dt);
+
+        if (threeReady && scene && renderer && camera) {
+          // Câmera panorâmica no Lobby
+          if (!appState.hasEntered) {
+            const angle = Math.sin(elapsed * 0.22) * 0.48;
+            camera.position.set(Math.sin(angle) * 14.5, 5.4, Math.cos(angle) * 13.5);
+            camera.lookAt(0, 2.3, -9.5);
+          }
+
+          // Atualiza todos os avatares (Local + Remotos + Bots)
+          const players = appState.room.players || {};
+          avatarEntities.forEach((ent, uid) => {
+            const isLocal = uid === localUid;
+            const pData = isLocal ? appState.localPlayer : players[uid];
+            if (!pData) return;
+
+            if (isLocal) {
+              ent.root.position.set(pData.x, pData.y, pData.z);
+              ent.root.rotation.y = pData.rotY;
+            } else {
+              const tx = typeof pData.targetX === 'number' ? pData.targetX : pData.x;
+              const ty = typeof pData.targetY === 'number' ? pData.targetY : pData.y;
+              const tz = typeof pData.targetZ === 'number' ? pData.targetZ : pData.z;
+              const tRot = typeof pData.targetRotY === 'number' ? pData.targetRotY : pData.rotY;
+
+              const dist = Math.hypot(tx - pData.x, tz - pData.z);
+              if (dist > 6.0) {
+                pData.x = tx;
+                pData.y = ty;
+                pData.z = tz;
+              } else {
+                const factor = Math.min(1, dt * 16);
+                pData.x += (tx - pData.x) * factor;
+                pData.y += (ty - pData.y) * factor;
+                pData.z += (tz - pData.z) * factor;
+              }
+
+              let rotDiff = tRot - pData.rotY;
+              while (rotDiff > Math.PI) rotDiff -= Math.PI * 2;
+              while (rotDiff < -Math.PI) rotDiff += Math.PI * 2;
+              pData.rotY += rotDiff * Math.min(1, dt * 14);
+
+              ent.root.position.set(pData.x, pData.y, pData.z);
+              ent.root.rotation.y = pData.rotY;
+            }
+
+            // Animação de passos, gesticulação no palco ou respiração
+            const isOnStage = appState.room.stagePoetUid === uid;
+            const raised = isLocal ? appState.localPlayer.placardRaised : !!pData.placardRaised;
+
+            if (pData.isMoving) {
+              const stride = Math.sin(elapsed * 11) * 0.65;
+              ent.leftLegGroup.rotation.x = stride;
+              ent.rightLegGroup.rotation.x = -stride;
+              ent.leftArmGroup.rotation.x = -stride * 0.6;
+              if (!raised) ent.rightArmGroup.rotation.x = stride * 0.6;
+              ent.torsoGroup.position.y = 1.18 + Math.abs(Math.cos(elapsed * 11)) * 0.04;
+            } else if (isOnStage) {
+              const beat = elapsed * 4.4;
+              ent.leftLegGroup.rotation.x *= 0.82;
+              ent.rightLegGroup.rotation.x *= 0.82;
+              ent.torsoGroup.rotation.z = Math.sin(beat * 0.5) * 0.08;
+              ent.leftArmGroup.rotation.x = -0.65 + Math.cos(beat * 1.2) * 0.35;
+              if (!raised) ent.rightArmGroup.rotation.x = -0.85 + Math.sin(beat * 1.4) * 0.45;
+            } else {
+              ent.leftLegGroup.rotation.x *= 0.82;
+              ent.rightLegGroup.rotation.x *= 0.82;
+              ent.torsoGroup.rotation.z = 0;
+              ent.leftArmGroup.rotation.x = Math.sin(elapsed * 2.2) * 0.05;
+              if (!raised) ent.rightArmGroup.rotation.x = -Math.sin(elapsed * 2.2) * 0.05;
+              ent.torsoGroup.position.y = 1.18 + Math.sin(elapsed * 2.5) * 0.015;
+            }
+
+            // Animação suave da plaquinha do júri
+            const targetP = raised ? 1 : 0;
+            ent.placardProgress += (targetP - ent.placardProgress) * Math.min(1, dt * 10);
+            if (ent.placardProgress > 0.02) {
+              ent.placardGroup.visible = true;
+              ent.rightArmGroup.rotation.x = -ent.placardProgress * 2.85;
+              ent.rightArmGroup.rotation.z = -ent.placardProgress * 0.14;
+            } else {
+              ent.placardGroup.visible = false;
+              ent.rightArmGroup.rotation.z = 0;
+            }
+          });
+
+          const bassPulse = 1 + Math.abs(Math.sin(elapsed * 6.5)) * 0.08;
+          speakerCones.forEach(c => c.scale.set(bassPulse, 1, bassPulse));
+          festoonBulbs.forEach(b => b.mesh.scale.setScalar(0.94 + Math.sin(elapsed * 3.0 + b.phase) * 0.08));
+
+          renderer.render(scene, camera);
         }
+
+        drawMiniRadar();
       }
 
       function drawMiniRadar() {
@@ -3116,390 +3699,51 @@
         ctx.fillStyle = '#1B110C';
         ctx.fillRect(0, 0, W, H);
 
-        // Desenha o Palco no topo do radar
+        // Palco no topo do radar
         ctx.fillStyle = '#8C4A32';
         ctx.fillRect(W * 0.25, 6, W * 0.5, 14);
 
-        // Desenha o Caixote do Encontrão Poético no centro
-        ctx.fillStyle = '#D99B26';
+        // Caixote do Encontrão Poético no centro
+        ctx.fillStyle = '#B7B0C0';
         ctx.fillRect(W * 0.44, H * 0.40, W * 0.12, 6);
 
         const toRadarX = (wx) => W / 2 + (wx / 25) * (W / 2 - 6);
         const toRadarY = (wz) => H / 2 + (wz / 25) * (H / 2 - 6);
 
+        // Coreto à direita da praça
+        ctx.fillStyle = '#EDE3D0';
+        ctx.beginPath();
+        ctx.arc(toRadarX(12.8), toRadarY(1.5), 8.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#A84B2B';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
         const players = appState.room.players || {};
-        Object.keys(players).forEach(uid => {
-          if (uid === localUid) return;
-          const p = players[uid];
+        const uids = new Set([localUid, ...Object.keys(players)]);
+        uids.forEach(uid => {
+          const p = uid === localUid ? appState.localPlayer : players[uid];
           if (!p) return;
-          ctx.fillStyle = uid === appState.room.stagePoetUid ? '#FF595E' : '#4E6E58';
+          const rx = toRadarX(p.x || 0);
+          const ry = toRadarY(p.z || 0);
+
           ctx.beginPath();
-          ctx.arc(toRadarX(p.x || 0), toRadarY(p.z || 0), 3.2, 0, Math.PI * 2);
+          ctx.arc(rx, ry, uid === localUid ? 4.2 : 3.2, 0, Math.PI * 2);
+          if (uid === localUid) {
+            ctx.fillStyle = '#D99B26';
+          } else if (uid === appState.room.stagePoetUid) {
+            ctx.fillStyle = '#FF595E';
+          } else if (appState.room.juryUids.includes(uid)) {
+            ctx.fillStyle = '#F4ECE1';
+          } else {
+            ctx.fillStyle = '#4E6E58';
+          }
           ctx.fill();
         });
-
-        // Jogador local em destaque
-        const lp = appState.localPlayer;
-        ctx.fillStyle = '#D99B26';
-        ctx.beginPath();
-        ctx.arc(toRadarX(lp.x), toRadarY(lp.z), 4.2, 0, Math.PI * 2);
-        ctx.fill();
-      }
-
-      let lastSecondTick = -1;
-      function animate() {
-        requestAnimationFrame(animate);
-        if (!threeReady || !renderer || !scene || !camera || !clock) return;
-
-        const dt = Math.min(clock.getDelta(), 0.05);
-        const elapsed = clock.getElapsedTime();
-
-        if (appState.room.timerRunning && appState.isHost) {
-          appState.room.elapsedSeconds += dt;
-          const whole = Math.floor(appState.room.elapsedSeconds);
-          if (whole !== lastSecondTick) {
-            lastSecondTick = whole;
-            updateTimerDisplays();
-            hostBroadcastFullState();
-          }
-        }
-
-        updateLocalMovementAndCamera(dt);
-        updateRemoteAvatars(dt);
-        drawMiniRadar();
-
-        const bassPulse = 1 + Math.abs(Math.sin(elapsed * 6.5)) * 0.08;
-        speakerCones.forEach(c => c.scale.set(bassPulse, 1, bassPulse));
-        festoonBulbs.forEach(b => b.mesh.scale.setScalar(0.94 + Math.sin(elapsed * 3.0 + b.phase) * 0.08));
-
-        if (!appState.hasEntered) {
-          const angle = Math.sin(elapsed * 0.22) * 0.48;
-          camera.position.set(Math.sin(angle) * 14.5, 5.4, Math.cos(angle) * 13.5);
-          camera.lookAt(0, 2.3, -9.5);
-        } else if (appState.cameraMode === 'first') {
-          const lp = appState.localPlayer;
-          camera.position.set(lp.x, lp.y + 1.65, lp.z);
-          const cosPitch = Math.cos(appState.cameraPitch);
-          camera.lookAt(
-            camera.position.x - Math.sin(appState.cameraYaw) * cosPitch,
-            camera.position.y - Math.sin(appState.cameraPitch),
-            camera.position.z - Math.cos(appState.cameraYaw) * cosPitch
-          );
-        } else {
-          const lp = appState.localPlayer;
-          const focus = new THREE.Vector3(lp.x, lp.y + 1.65, lp.z);
-          const horiz = appState.cameraDistance * Math.cos(appState.cameraPitch);
-          const vert = appState.cameraDistance * Math.sin(appState.cameraPitch);
-          const desired = new THREE.Vector3(
-            focus.x + Math.sin(appState.cameraYaw) * horiz,
-            Math.max(0.85, focus.y + vert),
-            focus.z + Math.cos(appState.cameraYaw) * horiz
-          );
-          camera.position.lerp(desired, Math.min(1, dt * 12));
-          camera.lookAt(focus);
-        }
-
-        renderer.render(scene, camera);
       }
 
       // =========================================================================
-      // 13. ATUALIZAÇÃO DE UI (HUD, PAINÉIS GM / JURADO / PLATEIA, BOTÃO DE VOZ)
-      // =========================================================================
-      function updateTimerDisplays() {
-        const formatted = formatSlamTime(appState.room.elapsedSeconds);
-        const hudTimer = document.getElementById('hud-timer');
-        const gmTimerBig = document.getElementById('gm-stage-timer-big');
-        const badge = document.getElementById('hud-timer-badge');
-        if (hudTimer) hudTimer.textContent = formatted;
-        if (gmTimerBig) gmTimerBig.textContent = formatted;
-        if (badge) {
-          if (appState.room.elapsedSeconds > 190) {
-            badge.textContent = 'ESTOURO';
-            badge.className = 'mt-0.5 text-[9px] font-bold px-1.5 py-0.2 rounded bg-red-600 text-white';
-          } else if (appState.room.elapsedSeconds > 180) {
-            badge.textContent = 'TOLERÂNCIA';
-            badge.className = 'mt-0.5 text-[9px] font-bold px-1.5 py-0.2 rounded bg-[#D99B26] text-[#2B1D16]';
-          } else {
-            badge.textContent = appState.room.timerRunning ? 'EM CENA' : 'PRONTO';
-            badge.className = 'mt-0.5 text-[9px] font-bold px-1.5 py-0.2 rounded bg-[#4E6E58] text-[#F4ECE1]';
-          }
-        }
-      }
-
-      function refreshAllUIs() {
-        const players = appState.room.players || {};
-        const playerUids = Object.keys(players);
-        const totalCount = Math.max(1, playerUids.length);
-
-        const countEl = document.getElementById('hud-player-count');
-        const radarCountEl = document.getElementById('radar-count-label');
-        if (countEl) countEl.textContent = String(totalCount);
-        if (radarCountEl) radarCountEl.textContent = String(totalCount);
-
-        const stagePoet = appState.room.stagePoetUid ? players[appState.room.stagePoetUid] : null;
-        const stagePoetEl = document.getElementById('hud-stage-poet');
-        if (stagePoetEl) {
-          stagePoetEl.textContent = stagePoet ? `🎤 ${stagePoet.name}` : 'Palco Livre';
-        }
-
-        // Atualiza botão de microfone do HUD superior
-        const micBtn = document.getElementById('btn-stage-mic');
-        const micDot = document.getElementById('mic-dot');
-        const micLabel = document.getElementById('mic-label');
-        const allowedToSpeak = canLocalSpeak();
-        if (micBtn && micDot && micLabel) {
-          if (appState.micActive) {
-            micDot.className = 'w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse';
-            micLabel.textContent = 'No Ar';
-            micBtn.classList.add('border-red-400');
-          } else if (allowedToSpeak) {
-            micDot.className = 'w-2.5 h-2.5 rounded-full bg-emerald-400';
-            micLabel.textContent = 'Falar';
-            micBtn.classList.remove('border-red-400');
-          } else {
-            micDot.className = 'w-2.5 h-2.5 rounded-full bg-[#F4ECE1]/30';
-            micLabel.textContent = appState.room.stagePoetUid ? 'Palco' : 'Mudo';
-            micBtn.classList.remove('border-red-400');
-          }
-        }
-
-        // Atualiza botões de Voz da Praça no painel do GM
-        const voiceOpen = !!appState.room.plazaVoiceOpen;
-        const gmVoiceBtn = document.getElementById('btn-gm-plaza-voice');
-        const gmVoiceAlt = document.getElementById('btn-gm-plaza-voice-alt');
-        const gmVoiceDesc = document.getElementById('gm-voice-status-desc');
-        if (gmVoiceBtn) {
-          gmVoiceBtn.innerHTML = voiceOpen
-            ? '<span>🔇 Fechar Voz da Praça</span>'
-            : '<span>🔊 Abrir Voz da Praça</span>';
-        }
-        if (gmVoiceAlt) {
-          gmVoiceAlt.textContent = voiceOpen ? '🔇 Fechar Praça' : '🔊 Abrir Praça';
-          gmVoiceAlt.className = voiceOpen
-            ? 'min-h-[38px] px-3 py-1.5 rounded-xl bg-[#C85A32] text-xs font-extrabold text-[#F4ECE1] transition shadow shrink-0'
-            : 'min-h-[38px] px-3 py-1.5 rounded-xl bg-[#4E6E58] hover:bg-[#5c8168] text-xs font-extrabold text-[#F4ECE1] transition shadow shrink-0';
-        }
-        if (gmVoiceDesc) {
-          if (appState.room.stagePoetUid) {
-            gmVoiceDesc.textContent = 'Silêncio de palco ativo (só Poeta e GM)';
-          } else {
-            gmVoiceDesc.textContent = voiceOpen
-              ? 'Aberta para toda a praça conversar'
-              : 'Fechada (só GM fala)';
-          }
-        }
-
-        // Botão de descer poeta do palco
-        const clearStageBtn = document.getElementById('btn-gm-clear-stage');
-        if (clearStageBtn) {
-          clearStageBtn.classList.toggle('hidden', !appState.room.stagePoetUid);
-        }
-
-        // Exibe painel correspondente ao papel do usuário
-        const isJudge = appState.room.juryUids.includes(localUid);
-        const gmPanel = document.getElementById('gm-panel');
-        const jurorPanel = document.getElementById('juror-panel');
-        const audiencePanel = document.getElementById('audience-panel');
-        const roleBadge = document.getElementById('hud-role-badge');
-
-        if (gmPanel) gmPanel.classList.add('hidden');
-        if (jurorPanel) jurorPanel.classList.add('hidden');
-        if (audiencePanel) audiencePanel.classList.add('hidden');
-
-        if (appState.isHost) {
-          if (gmPanel) {
-            gmPanel.classList.remove('hidden');
-            gmPanel.classList.add('flex');
-          }
-          if (roleBadge) roleBadge.textContent = 'GM';
-        } else if (isJudge) {
-          if (jurorPanel) {
-            jurorPanel.classList.remove('hidden');
-            jurorPanel.classList.add('flex');
-          }
-          if (roleBadge) {
-            roleBadge.textContent = 'JURADO';
-            roleBadge.className = 'px-1.5 py-0.2 rounded bg-[#D99B26] text-[#2B1D16] font-extrabold uppercase';
-          }
-        } else {
-          if (audiencePanel) {
-            audiencePanel.classList.remove('hidden');
-            audiencePanel.classList.add('flex');
-          }
-          if (roleBadge) {
-            roleBadge.textContent = appState.room.stagePoetUid === localUid ? 'POETA' : 'PLATEIA';
-            roleBadge.className = 'px-1.5 py-0.2 rounded bg-[#4E6E58] text-[#F4ECE1] font-extrabold uppercase';
-          }
-        }
-
-        // Botões rápidos no canto inferior direito
-        const quickPlacardBtn = document.getElementById('btn-quick-placard');
-        const quickPlacardLabel = document.getElementById('quick-placard-label');
-        const quickSignupBtn = document.getElementById('btn-quick-signup');
-        const alreadySigned = (appState.room.registeredPoets || []).some(p => p.uid === localUid);
-
-        if (quickPlacardBtn && quickPlacardLabel) {
-          quickPlacardBtn.classList.toggle('hidden', !isJudge);
-          quickPlacardLabel.textContent = appState.localPlayer.placardRaised
-            ? `Baixar (${appState.localPlayer.score.toFixed(1)})`
-            : `Plaquinha (${appState.localPlayer.score.toFixed(1)})`;
-        }
-        if (quickSignupBtn) {
-          quickSignupBtn.classList.toggle('hidden', !appState.room.registrationsOpen || alreadySigned);
-        }
-
-        // Inscrição da plateia no Chapeuzinho Virtual
-        const audRegBadge = document.getElementById('audience-reg-badge');
-        const audSignupBtn = document.getElementById('btn-audience-signup');
-        if (audRegBadge && audSignupBtn) {
-          if (!appState.room.registrationsOpen) {
-            audRegBadge.textContent = 'Fechado';
-            audRegBadge.className = 'text-[10px] px-2 py-0.5 rounded bg-[#2B1D16] text-[#F4ECE1]/60';
-            audSignupBtn.disabled = true;
-            audSignupBtn.textContent = 'Quero Rimar (Aguardando GM)';
-            audSignupBtn.className = 'w-full min-h-[44px] py-2.5 px-3 rounded-xl font-extrabold text-xs uppercase tracking-wide bg-[#2B1D16] text-[#F4ECE1]/45 border border-[#F4ECE1]/10 transition cursor-not-allowed';
-          } else if (alreadySigned) {
-            audRegBadge.textContent = 'Inscrito';
-            audRegBadge.className = 'text-[10px] px-2 py-0.5 rounded bg-[#D99B26] text-[#2B1D16] font-bold';
-            audSignupBtn.disabled = true;
-            audSignupBtn.textContent = 'Nome no Chapeuzinho!';
-            audSignupBtn.className = 'w-full min-h-[44px] py-2.5 px-3 rounded-xl font-extrabold text-xs uppercase tracking-wide bg-[#4E6E58]/40 text-[#F4ECE1] border border-[#4E6E58] transition';
-          } else {
-            audRegBadge.textContent = 'Aberto';
-            audRegBadge.className = 'text-[10px] px-2 py-0.5 rounded bg-[#4E6E58] text-[#F4ECE1] font-bold';
-            audSignupBtn.disabled = false;
-            audSignupBtn.textContent = 'Quero Rimar (Inscrever-se)';
-            audSignupBtn.className = 'w-full min-h-[44px] py-2.5 px-3 rounded-xl font-extrabold text-xs uppercase tracking-wide bg-gradient-to-r from-[#C85A32] to-[#D99B26] text-[#2B1D16] hover:brightness-110 transition shadow';
-          }
-        }
-
-        // Slots da Mesa do Júri (5)
-        const juryCountEl = document.getElementById('gm-jury-count');
-        const slotsEl = document.getElementById('gm-jury-slots');
-        const selfJudgeBox = document.getElementById('gm-self-judge-box');
-        if (juryCountEl) juryCountEl.textContent = String(appState.room.juryUids.length);
-        if (selfJudgeBox) selfJudgeBox.classList.toggle('hidden', !appState.room.juryUids.includes(localUid));
-        if (slotsEl) {
-          if (appState.room.juryUids.length === 0) {
-            slotsEl.innerHTML = '<span class="text-[11px] text-[#F4ECE1]/50">Selecione até 5 pessoas abaixo.</span>';
-          } else {
-            slotsEl.innerHTML = appState.room.juryUids.map((id, idx) => {
-              const jp = players[id];
-              const jName = jp ? escapeHtml(jp.name) : id;
-              return `
-                <span class="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-[#D99B26]/20 border border-[#D99B26]/50 text-[11px] font-bold text-[#F4ECE1]">
-                  <strong class="text-[#D99B26]">#${idx + 1}</strong> ${jName}
-                  <button type="button" data-remove-jury="${id}" class="ml-1 text-[#F4ECE1]/60 hover:text-red-300 font-extrabold">×</button>
-                </span>
-              `;
-            }).join('');
-          }
-        }
-
-        // Lista de conectados na praça com botões de +Júri e Mutar/Desmutar
-        const playersListEl = document.getElementById('gm-players-list');
-        if (playersListEl) {
-          const mutedList = appState.room.mutedUids || [];
-          playersListEl.innerHTML = playerUids.map(uid => {
-            const p = players[uid];
-            const inJury = appState.room.juryUids.includes(uid);
-            const isMuted = mutedList.includes(uid);
-            const isSelf = uid === localUid;
-            return `
-              <div class="flex items-center justify-between gap-1.5 px-2.5 py-1.5 rounded-xl bg-[#2B1D16]/75 border border-[#F4ECE1]/10">
-                <div class="min-w-0 flex-1">
-                  <span class="block text-xs font-bold text-[#F4ECE1] truncate">${escapeHtml(p.name)} ${isSelf ? '(Você)' : ''}</span>
-                  <span class="text-[10px] text-[#F4ECE1]/55">${inJury ? 'Jurado' : (appState.room.stagePoetUid === uid ? 'No Palco' : 'Plateia')}</span>
-                </div>
-                <div class="flex items-center gap-1 shrink-0">
-                  ${!isSelf ? `
-                    <button type="button" data-toggle-mute="${uid}" class="px-2 py-1 rounded-lg text-[11px] font-extrabold transition ${
-                      isMuted ? 'bg-red-700 text-white' : 'bg-[#2B1D16] border border-[#F4ECE1]/20 text-[#F4ECE1]'
-                    }" title="${isMuted ? 'Desmutar pessoa' : 'Mutar pessoa'}">
-                      ${isMuted ? '🔇' : '🔊'}
-                    </button>
-                  ` : ''}
-                  <button type="button" data-toggle-jury="${uid}" class="px-2.5 py-1 rounded-lg text-[11px] font-extrabold transition ${
-                    inJury ? 'bg-[#C85A32] text-[#F4ECE1]' : 'bg-[#4E6E58] text-[#F4ECE1]'
-                  }">
-                    ${inJury ? 'Sair Júri' : '+ Júri'}
-                  </button>
-                </div>
-              </div>
-            `;
-          }).join('');
-
-          if (slotsEl) {
-            slotsEl.querySelectorAll('[data-remove-jury]').forEach(btn => {
-              btn.addEventListener('click', () => gmTogglePlayerInJury(btn.dataset.removeJury));
-            });
-          }
-          playersListEl.querySelectorAll('[data-toggle-jury]').forEach(btn => {
-            btn.addEventListener('click', () => gmTogglePlayerInJury(btn.dataset.toggleJury));
-          });
-          playersListEl.querySelectorAll('[data-toggle-mute]').forEach(btn => {
-            btn.addEventListener('click', () => gmToggleMutePlayer(btn.dataset.toggleMute));
-          });
-        }
-
-        // Lista de inscritos e ordem sorteada (Poetas)
-        const regToggleBtn = document.getElementById('btn-gm-toggle-reg');
-        const regKnob = document.getElementById('gm-reg-knob');
-        const regHint = document.getElementById('gm-reg-hint');
-        if (regToggleBtn && regKnob && regHint) {
-          regToggleBtn.setAttribute('aria-checked', String(!!appState.room.registrationsOpen));
-          regToggleBtn.className = appState.room.registrationsOpen
-            ? 'w-12 h-7 rounded-full bg-[#4E6E58] border border-[#F4ECE1]/25 p-1 transition flex items-center'
-            : 'w-12 h-7 rounded-full bg-[#2B1D16] border border-[#F4ECE1]/25 p-1 transition flex items-center';
-          regKnob.style.transform = appState.room.registrationsOpen ? 'translateX(20px)' : 'translateX(0px)';
-          regHint.textContent = appState.room.registrationsOpen ? 'Abertas! Plateia já pode entrar.' : 'Fechadas no momento';
-        }
-
-        const poolCountEl = document.getElementById('gm-poet-pool-count');
-        const poolListEl = document.getElementById('gm-poet-pool-list');
-        const pool = appState.room.registeredPoets || [];
-        if (poolCountEl) poolCountEl.textContent = String(pool.length);
-        if (poolListEl) {
-          poolListEl.innerHTML = pool.length === 0
-            ? '<span class="text-[11px] text-[#F4ECE1]/50">Abra inscrições ou adicione poetas.</span>'
-            : pool.map(p => `<span class="px-2 py-1 rounded-lg bg-[#2B1D16] border border-[#F4ECE1]/15 text-[11px] font-semibold text-[#F4ECE1]">${escapeHtml(p.name)}</span>`).join('');
-        }
-
-        const drawnListEl = document.getElementById('gm-drawn-order-list');
-        const drawnProgEl = document.getElementById('gm-drawn-progress');
-        const drawn = appState.room.drawnOrder || [];
-        if (drawnProgEl) drawnProgEl.textContent = `${Math.max(0, appState.room.currentPoetIndex + 1)}/${drawn.length}`;
-        if (drawnListEl) {
-          drawnListEl.innerHTML = drawn.length === 0
-            ? '<li class="text-[11px] text-[#F4ECE1]/50">Aguardando sorteio...</li>'
-            : drawn.map((item, idx) => {
-                const isCur = idx === appState.room.currentPoetIndex;
-                const cls = isCur
-                  ? 'bg-[#C85A32] text-[#F4ECE1] font-extrabold'
-                  : (item.done ? 'bg-[#2B1D16]/50 text-[#F4ECE1]/45 line-through' : 'bg-[#2B1D16] text-[#F4ECE1]');
-                return `<li class="flex items-center justify-between px-2.5 py-1.5 rounded-lg ${cls}"><span><strong class="font-mono-led mr-1.5">${idx + 1}º</strong> ${escapeHtml(item.name)}</span><span class="text-[10px] uppercase">${isCur ? 'Palco' : (item.done ? 'OK' : 'Fila')}</span></li>`;
-              }).join('');
-        }
-
-        // Placar da Edição
-        const lbEl = document.getElementById('gm-leaderboard-list');
-        if (lbEl) {
-          const lb = appState.room.leaderboard || [];
-          lbEl.innerHTML = lb.length === 0
-            ? '<p class="text-[11px] text-[#F4ECE1]/50">Nenhuma pontuação salva ainda.</p>'
-            : lb.map((item, idx) => `
-              <div class="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-[#2B1D16]/80">
-                <span class="font-bold text-[#F4ECE1]"><strong class="text-[#D99B26] mr-1">${idx + 1}º</strong> ${escapeHtml(item.name)}</span>
-                <span class="font-mono-led font-extrabold text-[#D99B26]">${item.score.toFixed(1)}</span>
-              </div>
-            `).join('');
-        }
-
-        updateLedScreenTexture();
-      }
-
-      // =========================================================================
-      // 14. CONTROLES DE CÂMERA, GAVETA, LOBBY, TOUCH E TECLADO
+      // 14. ATUALIZAÇÃO DE INTERFACE (HUD, GAVETA, JÚRI, POETAS, VOZ, MUTE)
       // =========================================================================
       function applyCameraMode(mode) {
         appState.cameraMode = mode;
@@ -3510,79 +3754,393 @@
           localEnt.badgeSprite.visible = !isFirst;
           if (isFirst) localEnt.chatSprite.visible = false;
         }
-        const labelEl = document.getElementById('camera-mode-label');
-        const reticleEl = document.getElementById('first-person-reticle');
-        if (labelEl) labelEl.textContent = isFirst ? '1ª Pessoa' : '3ª Pessoa';
-        if (reticleEl) reticleEl.classList.toggle('hidden', !isFirst || !appState.hasEntered);
+        const label = document.getElementById('camera-mode-label');
+        const reticle = document.getElementById('first-person-reticle');
+        if (label) label.textContent = isFirst ? '1ª Pess.' : '3ª Pess.';
+        if (reticle) reticle.classList.toggle('hidden', !isFirst || !appState.hasEntered);
       }
 
-      function openDrawer() {
-        appState.drawerOpen = true;
+      function setDrawerOpen(open) {
+        appState.drawerOpen = open;
         const drawer = document.getElementById('side-drawer');
-        if (drawer) {
+        if (!drawer) return;
+        if (open) {
           drawer.classList.remove('hidden');
           drawer.classList.add('flex');
-        }
-      }
-
-      function closeDrawer() {
-        appState.drawerOpen = false;
-        const drawer = document.getElementById('side-drawer');
-        if (drawer) {
+        } else {
           drawer.classList.add('hidden');
           drawer.classList.remove('flex');
         }
       }
 
-      function enterArena(mode) {
-        const nameInput = document.getElementById('lobby-name-input').value.trim();
-        const codeInput = document.getElementById('lobby-room-code-input').value;
-        appState.roomCode = sanitizeRoomCode(codeInput);
-        appState.isHost = mode === 'gm';
-        appState.localPlayer.name = nameInput || (appState.isHost ? 'Slammaster' : 'Poeta-' + generateShortId(3));
+      function updateTimerDisplays() {
+        const formatted = formatSlamTime(appState.room.elapsedSeconds);
+        const hudTimer = document.getElementById('hud-timer');
+        const gmTimerBig = document.getElementById('gm-stage-timer-big');
+        const badgeEl = document.getElementById('hud-timer-badge');
 
-        // Posição inicial: GM perto do palco, Plateia na roda
+        if (hudTimer) hudTimer.textContent = formatted;
+        if (gmTimerBig) gmTimerBig.textContent = formatted;
+
+        if (appState.room.elapsedSeconds > 190) {
+          if (hudTimer) hudTimer.className = 'font-mono-led text-xs sm:text-sm font-extrabold text-red-400 leading-none';
+          if (gmTimerBig) gmTimerBig.className = 'font-mono-led text-4xl font-extrabold text-red-400';
+          if (badgeEl) {
+            badgeEl.textContent = 'ESTOURADO';
+            badgeEl.className = 'mt-0.5 text-[9px] font-bold px-1.5 py-0.2 rounded bg-red-600 text-white';
+          }
+        } else if (appState.room.elapsedSeconds > 180) {
+          if (hudTimer) hudTimer.className = 'font-mono-led text-xs sm:text-sm font-extrabold text-[#D99B26] leading-none';
+          if (gmTimerBig) gmTimerBig.className = 'font-mono-led text-4xl font-extrabold text-[#D99B26]';
+          if (badgeEl) {
+            badgeEl.textContent = 'TOLERÂNCIA';
+            badgeEl.className = 'mt-0.5 text-[9px] font-bold px-1.5 py-0.2 rounded bg-[#D99B26] text-[#2B1D16]';
+          }
+        } else {
+          if (hudTimer) hudTimer.className = 'font-mono-led text-xs sm:text-sm font-extrabold text-[#F4ECE1] leading-none';
+          if (gmTimerBig) gmTimerBig.className = 'font-mono-led text-4xl font-extrabold text-[#F4ECE1]';
+          if (badgeEl) {
+            badgeEl.textContent = appState.room.timerRunning ? 'EM CENA' : 'PRONTO';
+            badgeEl.className = 'mt-0.5 text-[9px] font-bold px-1.5 py-0.2 rounded bg-[#4E6E58] text-[#F4ECE1]';
+          }
+        }
+      }
+
+      function refreshAllUIs() {
+        const players = appState.room.players || {};
+        const allUids = new Set([localUid, ...Object.keys(players)]);
+        const count = allUids.size;
+
+        const countEl = document.getElementById('hud-player-count');
+        const radarCountEl = document.getElementById('radar-count-label');
+        if (countEl) countEl.textContent = String(count);
+        if (radarCountEl) radarCountEl.textContent = String(count);
+
+        const roomCodeEl = document.getElementById('hud-room-code');
+        const drawerRoomEl = document.getElementById('drawer-room-label');
+        if (roomCodeEl) roomCodeEl.textContent = appState.roomCode;
+        if (drawerRoomEl) drawerRoomEl.textContent = appState.roomCode;
+
+        // Papel atual do jogador local
+        const isJudge = appState.room.juryUids.includes(localUid);
+        const isStagePoet = appState.room.stagePoetUid === localUid;
+        const roleBadge = document.getElementById('hud-role-badge');
+        if (roleBadge) {
+          if (appState.isHost) {
+            roleBadge.textContent = 'GM';
+            roleBadge.className = 'px-1.5 py-0.2 rounded bg-[#C85A32] text-[#F4ECE1] font-extrabold uppercase';
+          } else if (isStagePoet) {
+            roleBadge.textContent = 'POETA';
+            roleBadge.className = 'px-1.5 py-0.2 rounded bg-[#D99B26] text-[#2B1D16] font-extrabold uppercase';
+          } else if (isJudge) {
+            roleBadge.textContent = 'JURADO';
+            roleBadge.className = 'px-1.5 py-0.2 rounded bg-[#D99B26] text-[#2B1D16] font-extrabold uppercase';
+          } else {
+            roleBadge.textContent = 'PLATEIA';
+            roleBadge.className = 'px-1.5 py-0.2 rounded bg-[#4E6E58] text-[#F4ECE1] font-extrabold uppercase';
+          }
+        }
+
+        const stagePoetObj = appState.room.stagePoetUid ? players[appState.room.stagePoetUid] : null;
+        const hudStageEl = document.getElementById('hud-stage-poet');
+        if (hudStageEl) {
+          hudStageEl.textContent = stagePoetObj ? `Palco: ${stagePoetObj.name}` : 'Palco Livre';
+        }
+
+        // Botão de Microfone no HUD Superior
+        const micBtn = document.getElementById('btn-stage-mic');
+        const micDot = document.getElementById('mic-dot');
+        const micLabel = document.getElementById('mic-label');
+        const allowedToSpeak = canLocalSpeak();
+        if (micBtn && micDot && micLabel) {
+          if (appState.micActive) {
+            micDot.className = 'w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse';
+            micLabel.textContent = 'Mic: AO VIVO';
+            micBtn.classList.add('border-red-500');
+          } else if (allowedToSpeak) {
+            micDot.className = 'w-2.5 h-2.5 rounded-full bg-[#4E6E58]';
+            micLabel.textContent = 'Mic: Livre';
+            micBtn.classList.remove('border-red-500');
+          } else {
+            micDot.className = 'w-2.5 h-2.5 rounded-full bg-[#F4ECE1]/30';
+            micLabel.textContent = 'Mic: Mudo';
+            micBtn.classList.remove('border-red-500');
+          }
+        }
+
+        // Alterna painéis da gaveta conforme papel
+        const gmPanel = document.getElementById('gm-panel');
+        const jurorPanel = document.getElementById('juror-panel');
+        const audiencePanel = document.getElementById('audience-panel');
+        if (gmPanel && jurorPanel && audiencePanel) {
+          gmPanel.classList.add('hidden');
+          gmPanel.classList.remove('flex');
+          jurorPanel.classList.add('hidden');
+          jurorPanel.classList.remove('flex');
+          audiencePanel.classList.add('hidden');
+          audiencePanel.classList.remove('flex');
+
+          if (appState.isHost) {
+            gmPanel.classList.remove('hidden');
+            gmPanel.classList.add('flex');
+          } else if (isJudge) {
+            jurorPanel.classList.remove('hidden');
+            jurorPanel.classList.add('flex');
+          } else {
+            audiencePanel.classList.remove('hidden');
+            audiencePanel.classList.add('flex');
+            const audTitle = document.getElementById('audience-panel-title');
+            const audTag = document.getElementById('audience-panel-tag');
+            if (audTitle && audTag) {
+              if (isStagePoet) {
+                audTitle.textContent = 'Poeta da Vez • No Palco';
+                audTag.textContent = 'POETA';
+                audTag.className = 'px-2 py-0.5 rounded bg-[#C85A32] text-[#F4ECE1] text-[10px] font-extrabold';
+              } else {
+                audTitle.textContent = 'Roda da Plateia';
+                audTag.textContent = 'PLATEIA';
+                audTag.className = 'px-2 py-0.5 rounded bg-[#4E6E58] text-[#F4ECE1] text-[10px] font-extrabold';
+              }
+            }
+          }
+        }
+
+        // Controles exclusivos do GM
         if (appState.isHost) {
+          const voiceBtn1 = document.getElementById('btn-gm-plaza-voice');
+          const voiceBtn2 = document.getElementById('btn-gm-plaza-voice-alt');
+          const voiceDesc = document.getElementById('gm-voice-status-desc');
+          const isOpen = !!appState.room.plazaVoiceOpen;
+
+          if (voiceBtn1) {
+            voiceBtn1.innerHTML = isOpen
+              ? '<span>🔇 Fechar Voz da Praça</span>'
+              : '<span>🔊 Abrir Voz da Praça</span>';
+          }
+          if (voiceBtn2) {
+            voiceBtn2.textContent = isOpen ? '🔇 Fechar Praça' : '🔊 Abrir Praça';
+          }
+          if (voiceDesc) {
+            voiceDesc.textContent = appState.room.stagePoetUid
+              ? 'Silenciada (Poeta no palco)'
+              : (isOpen ? 'Aberta para todos' : 'Fechada (só GM fala)');
+          }
+
+          // Mesa do Júri (Slots e Lista de Participantes com Mute Individual)
+          const juryCountEl = document.getElementById('gm-jury-count');
+          const jurySlotsEl = document.getElementById('gm-jury-slots');
+          const playersListEl = document.getElementById('gm-players-list');
+          const selfJudgeBox = document.getElementById('gm-self-judge-box');
+
+          if (juryCountEl) juryCountEl.textContent = String(appState.room.juryUids.length);
+          if (selfJudgeBox) selfJudgeBox.classList.toggle('hidden', !isJudge);
+
+          if (jurySlotsEl) {
+            if (appState.room.juryUids.length === 0) {
+              jurySlotsEl.innerHTML = '<span class="text-[11px] text-[#F4ECE1]/50">Selecione até 5 pessoas abaixo.</span>';
+            } else {
+              jurySlotsEl.innerHTML = appState.room.juryUids.map((uid, i) => {
+                const pl = uid === localUid ? appState.localPlayer : players[uid];
+                return `
+                  <span class="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-[#D99B26]/20 border border-[#D99B26]/50 text-[11px] font-bold text-[#F4ECE1]">
+                    <strong class="text-[#D99B26]">#${i + 1}</strong> ${escapeHtml(pl?.name || uid)}
+                    <button type="button" data-gm-remove-jury="${uid}" class="ml-1 text-[#F4ECE1]/60 hover:text-red-300 font-extrabold">×</button>
+                  </span>
+                `;
+              }).join('');
+
+              jurySlotsEl.querySelectorAll('[data-gm-remove-jury]').forEach(btn => {
+                btn.addEventListener('click', () => gmTogglePlayerInJury(btn.dataset.gmRemoveJury));
+              });
+            }
+          }
+
+          if (playersListEl) {
+            const mutedList = appState.room.mutedUids || [];
+            playersListEl.innerHTML = Array.from(allUids).map(uid => {
+              const pl = uid === localUid ? appState.localPlayer : players[uid];
+              if (!pl) return '';
+              const inJury = appState.room.juryUids.includes(uid);
+              const isMuted = mutedList.includes(uid);
+              const muteBtnHtml = uid === localUid
+                ? ''
+                : `<button type="button" data-gm-mute="${uid}" class="px-2 py-1 rounded-lg text-[11px] font-extrabold transition shrink-0 ${
+                    isMuted
+                      ? 'bg-red-700/80 text-white'
+                      : 'bg-[#2B1D16] hover:bg-[#C85A32] border border-[#F4ECE1]/20 text-[#F4ECE1]'
+                  }" title="${isMuted ? 'Desmutar voz' : 'Mutar voz'}">${isMuted ? '🔇' : '🔊'}</button>`;
+
+              return `
+                <div class="flex items-center justify-between gap-1.5 px-2.5 py-1.5 rounded-xl bg-[#2B1D16]/75 border border-[#F4ECE1]/10">
+                  <span class="text-xs font-bold text-[#F4ECE1] truncate">${escapeHtml(pl.name)} ${uid === localUid ? '(Você)' : ''}</span>
+                  <div class="flex items-center gap-1 shrink-0">
+                    ${muteBtnHtml}
+                    <button type="button" data-gm-jury="${uid}" class="px-2 py-1 rounded-lg text-[11px] font-extrabold transition ${
+                      inJury ? 'bg-[#C85A32] text-[#F4ECE1]' : 'bg-[#4E6E58] hover:bg-[#5c8168] text-[#F4ECE1]'
+                    }">
+                      ${inJury ? 'No Júri' : '+ Júri'}
+                    </button>
+                  </div>
+                </div>
+              `;
+            }).join('');
+
+            playersListEl.querySelectorAll('[data-gm-jury]').forEach(btn => {
+              btn.addEventListener('click', () => gmTogglePlayerInJury(btn.dataset.gmJury));
+            });
+            playersListEl.querySelectorAll('[data-gm-mute]').forEach(btn => {
+              btn.addEventListener('click', () => gmToggleMutePlayer(btn.dataset.gmMute));
+            });
+          }
+
+          // Chave de Inscrições & Lista de Poetas
+          const regBtn = document.getElementById('btn-gm-toggle-reg');
+          const regKnob = document.getElementById('gm-reg-knob');
+          const regHint = document.getElementById('gm-reg-hint');
+          if (regBtn && regKnob && regHint) {
+            const open = !!appState.room.registrationsOpen;
+            regBtn.setAttribute('aria-checked', String(open));
+            regBtn.classList.toggle('bg-[#4E6E58]', open);
+            regBtn.classList.toggle('bg-[#2B1D16]', !open);
+            regKnob.style.transform = open ? 'translateX(20px)' : 'translateX(0px)';
+            regHint.textContent = open ? 'Aberto para toda a praça' : 'Fechadas no momento';
+          }
+
+          const poolCountEl = document.getElementById('gm-poet-pool-count');
+          const poolListEl = document.getElementById('gm-poet-pool-list');
+          const pool = appState.room.registeredPoets || [];
+          if (poolCountEl) poolCountEl.textContent = String(pool.length);
+          if (poolListEl) {
+            poolListEl.innerHTML = pool.length === 0
+              ? '<span class="text-[11px] text-[#F4ECE1]/50">Abra inscrições ou adicione poetas.</span>'
+              : pool.map(p => `<span class="px-2 py-1 rounded-lg bg-[#2B1D16] border border-[#F4ECE1]/15 text-[11px] font-semibold text-[#F4ECE1]">${escapeHtml(p.name)}</span>`).join('');
+          }
+
+          const drawnListEl = document.getElementById('gm-drawn-order-list');
+          const drawnProgEl = document.getElementById('gm-drawn-progress');
+          const order = appState.room.drawnOrder || [];
+          if (drawnProgEl) drawnProgEl.textContent = `${Math.max(0, appState.room.currentPoetIndex + 1)}/${order.length}`;
+          if (drawnListEl) {
+            drawnListEl.innerHTML = order.length === 0
+              ? '<li class="text-[11px] text-[#F4ECE1]/50">Aguardando sorteio...</li>'
+              : order.map((p, idx) => {
+                  const curr = idx === appState.room.currentPoetIndex;
+                  const cls = curr
+                    ? 'bg-[#C85A32] text-[#F4ECE1] font-extrabold'
+                    : (p.done ? 'bg-[#2B1D16]/50 text-[#F4ECE1]/45 line-through' : 'bg-[#2B1D16] text-[#F4ECE1]');
+                  return `<li class="flex items-center justify-between px-2.5 py-1.5 rounded-lg ${cls}"><span><strong class="font-mono-led mr-1.5">${idx + 1}º</strong>${escapeHtml(p.name)}</span><span class="text-[10px] uppercase">${curr ? 'Palco' : (p.done ? 'OK' : 'Fila')}</span></li>`;
+                }).join('');
+          }
+
+          const clearStageBtn = document.getElementById('btn-gm-clear-stage');
+          if (clearStageBtn) {
+            clearStageBtn.classList.toggle('hidden', !appState.room.stagePoetUid);
+          }
+
+          const lbEl = document.getElementById('gm-leaderboard-list');
+          const lb = appState.room.leaderboard || [];
+          if (lbEl) {
+            lbEl.innerHTML = lb.length === 0
+              ? '<p class="text-[11px] text-[#F4ECE1]/50">Nenhuma pontuação salva ainda.</p>'
+              : lb.map((item, i) => `<div class="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-[#2B1D16]/80"><span class="font-bold text-[#F4ECE1]"><strong class="text-[#D99B26] mr-1">${i + 1}º</strong>${escapeHtml(item.name)}</span><span class="font-mono-led font-extrabold text-[#D99B26]">${item.score.toFixed(1)}</span></div>`).join('');
+          }
+        }
+
+        // Botões rápidos mobile
+        const quickPlacardBtn = document.getElementById('btn-quick-placard');
+        const quickPlacardLabel = document.getElementById('quick-placard-label');
+        const quickSignupBtn = document.getElementById('btn-quick-signup');
+        const audBadge = document.getElementById('audience-reg-badge');
+        const audSignupBtn = document.getElementById('btn-audience-signup');
+        const alreadySignedUp = (appState.room.registeredPoets || []).some(p => p.uid === localUid);
+
+        if (quickPlacardBtn && quickPlacardLabel) {
+          quickPlacardBtn.classList.toggle('hidden', !isJudge);
+          quickPlacardLabel.textContent = appState.localPlayer.placardRaised
+            ? `Baixar (${appState.localPlayer.score.toFixed(1)})`
+            : `Plaquinha (${appState.localPlayer.score.toFixed(1)})`;
+        }
+
+        if (quickSignupBtn) {
+          quickSignupBtn.classList.toggle('hidden', !appState.room.registrationsOpen || alreadySignedUp);
+        }
+
+        if (audBadge && audSignupBtn) {
+          if (!appState.room.registrationsOpen) {
+            audBadge.textContent = 'Fechado';
+            audSignupBtn.disabled = true;
+            audSignupBtn.textContent = 'Quero Rimar (Aguardando GM)';
+          } else if (alreadySignedUp) {
+            audBadge.textContent = 'Inscrito';
+            audSignupBtn.disabled = true;
+            audSignupBtn.textContent = '✅ Nome no Chapeuzinho!';
+          } else {
+            audBadge.textContent = 'Aberto';
+            audSignupBtn.disabled = false;
+            audSignupBtn.textContent = '🎩 Quero Rimar (Inscrever-se)';
+          }
+        }
+
+        updateTimerDisplays();
+        updateLedScreenTexture();
+      }
+
+      // =========================================================================
+      // 15. ENTRADA NA ARENA & LISTENERS DE UI, TECLADO, MOUSE E TOUCH
+      // =========================================================================
+      function enterArena(asHost) {
+        const nameInput = document.getElementById('lobby-name-input');
+        const codeInput = document.getElementById('lobby-room-code-input');
+
+        appState.isHost = !!asHost;
+        appState.roomCode = sanitizeRoomCode(codeInput ? codeInput.value : 'SLAM-2026');
+        const typedName = nameInput ? nameInput.value.trim() : '';
+        appState.localPlayer.name = typedName || (asHost ? 'Slammaster' : 'Poeta ' + generateShortId(3));
+
+        if (asHost) {
           appState.localPlayer.x = 0;
-          appState.localPlayer.z = -1.2;
+          appState.localPlayer.y = 0;
+          appState.localPlayer.z = 3.4;
+          appState.localPlayer.rotY = Math.PI;
           appState.cameraYaw = 0;
           appState.cameraPitch = 0.04;
+          appState.cameraMode = 'first';
         } else {
-          appState.localPlayer.x = (Math.random() - 0.5) * 4.5;
-          appState.localPlayer.z = 2.6 + Math.random() * 2.0;
+          const offsetAngle = (Math.random() - 0.5) * 1.6;
+          appState.localPlayer.x = Math.sin(offsetAngle) * 4.5;
+          appState.localPlayer.y = 0;
+          appState.localPlayer.z = 2.0 + Math.cos(offsetAngle) * 2.5;
+          appState.localPlayer.rotY = Math.PI;
           appState.cameraYaw = 0;
           appState.cameraPitch = 0.34;
+          appState.cameraMode = 'third';
         }
 
         appState.room.players[localUid] = { ...appState.localPlayer, lastSeen: Date.now() };
         appState.hasEntered = true;
 
-        document.getElementById('hud-room-code').textContent = appState.roomCode;
-        document.getElementById('drawer-room-label').textContent = appState.roomCode;
-
+        // Oculta Lobby e revela HUDs da Arena
         document.getElementById('lobby-overlay').classList.add('hidden');
-        document.getElementById('top-hud').classList.remove('hidden');
-        document.getElementById('top-hud').classList.add('flex');
+        const topHud = document.getElementById('top-hud');
+        topHud.classList.remove('hidden');
+        topHud.classList.add('flex');
+
         document.getElementById('mini-radar-box').classList.remove('hidden');
         document.getElementById('virtual-joystick').classList.remove('hidden');
-        document.getElementById('mobile-quick-actions').classList.remove('hidden');
-        document.getElementById('mobile-quick-actions').classList.add('flex');
+        const quickActions = document.getElementById('mobile-quick-actions');
+        quickActions.classList.remove('hidden');
+        quickActions.classList.add('flex');
 
-        applyCameraMode(appState.isHost ? 'first' : 'third');
+        applyCameraMode(appState.cameraMode);
         syncAvatarEntities();
         refreshAllUIs();
         initNetworking();
 
-        // Abre painel automaticamente no desktop e mantém arena livre no celular
-        if (window.innerWidth > 768) {
-          openDrawer();
-        } else {
-          closeDrawer();
-        }
+        showToast(asHost ? 'Sala criada! Você é o Slammaster (GM).' : 'Conectando à praça do Slam...');
       }
 
       function setupUIListeners() {
-        // Customização no Lobby
+        // Customização do Lobby
         document.querySelectorAll('.lobby-skin-btn').forEach(btn => {
           btn.addEventListener('click', () => {
             document.querySelectorAll('.lobby-skin-btn').forEach(b => b.classList.remove('border-[#D99B26]', 'scale-110'));
@@ -3611,42 +4169,42 @@
           });
         });
 
-        function copyInviteLink() {
-          const code = sanitizeRoomCode(document.getElementById('lobby-room-code-input').value || appState.roomCode);
-          const url = `${window.location.origin}${window.location.pathname}?sala=${code}`;
-          copyTextSafe(url);
-        }
+        const getInviteUrl = () => {
+          const code = sanitizeRoomCode(document.getElementById('lobby-room-code-input')?.value || appState.roomCode);
+          return `${window.location.origin}${window.location.pathname}?sala=${code}`;
+        };
 
-        document.getElementById('btn-copy-invite').addEventListener('click', copyInviteLink);
-        document.getElementById('btn-drawer-copy-invite').addEventListener('click', copyInviteLink);
-        document.getElementById('btn-create-gm').addEventListener('click', () => enterArena('gm'));
-        document.getElementById('btn-join-audience').addEventListener('click', () => enterArena('audience'));
+        document.getElementById('btn-copy-invite')?.addEventListener('click', () => copyTextSafe(getInviteUrl()));
+        document.getElementById('btn-drawer-copy-invite')?.addEventListener('click', () => copyTextSafe(getInviteUrl()));
 
-        // HUD Superior
-        document.getElementById('btn-stage-mic').addEventListener('click', toggleLocalMicrophone);
-        document.getElementById('btn-toggle-camera').addEventListener('click', () => {
+        document.getElementById('btn-create-gm')?.addEventListener('click', () => enterArena(true));
+        document.getElementById('btn-join-audience')?.addEventListener('click', () => enterArena(false));
+
+        // Controles do HUD Superior e Gaveta
+        document.getElementById('btn-stage-mic')?.addEventListener('click', toggleLocalMicrophone);
+        document.getElementById('btn-toggle-camera')?.addEventListener('click', () => {
           applyCameraMode(appState.cameraMode === 'first' ? 'third' : 'first');
         });
-        document.getElementById('btn-force-sync').addEventListener('click', () => {
+        document.getElementById('btn-force-sync')?.addEventListener('click', () => {
           broadcastLocalPosition(true);
           if (appState.isHost) {
             hostBroadcastFullState();
           } else {
             sendToHost({ msgId: makeMsgId(), type: 'request_sync' });
           }
-          showToast('Posições e arena sincronizadas!');
+          showToast('Posições e sala sincronizadas!');
         });
-        document.getElementById('btn-toggle-drawer').addEventListener('click', () => {
-          if (appState.drawerOpen) closeDrawer();
-          else openDrawer();
-        });
-        document.getElementById('btn-close-drawer-top').addEventListener('click', closeDrawer);
-        document.getElementById('btn-close-drawer-bottom').addEventListener('click', closeDrawer);
 
-        // Abas do Painel do GM
+        document.getElementById('btn-toggle-drawer')?.addEventListener('click', () => {
+          setDrawerOpen(!appState.drawerOpen);
+        });
+        document.getElementById('btn-close-drawer-top')?.addEventListener('click', () => setDrawerOpen(false));
+        document.getElementById('btn-close-drawer-bottom')?.addEventListener('click', () => setDrawerOpen(false));
+
+        // Abas do GM
         document.querySelectorAll('.gm-tab-btn').forEach(btn => {
           btn.addEventListener('click', () => {
-            const tab = btn.dataset.gmTab;
+            const target = btn.dataset.gmTab;
             document.querySelectorAll('.gm-tab-btn').forEach(b => {
               b.classList.remove('bg-[#C85A32]', 'text-[#F4ECE1]', 'font-extrabold');
               b.classList.add('text-[#F4ECE1]/70', 'font-bold');
@@ -3655,71 +4213,70 @@
             btn.classList.remove('text-[#F4ECE1]/70', 'font-bold');
 
             document.querySelectorAll('.gm-tab-content').forEach(sec => {
-              sec.classList.toggle('hidden', sec.id !== `gm-tab-${tab}`);
+              sec.classList.toggle('hidden', sec.id !== `gm-tab-${target}`);
             });
           });
         });
 
-        // Ações do GM
-        document.getElementById('btn-add-bots').addEventListener('click', addTestBots);
-        document.getElementById('btn-gm-plaza-voice').addEventListener('click', gmTogglePlazaVoice);
-        document.getElementById('btn-gm-plaza-voice-alt').addEventListener('click', gmTogglePlazaVoice);
-        document.getElementById('btn-gm-random-jury').addEventListener('click', gmDrawRandomJury);
-        document.getElementById('btn-gm-request-scores').addEventListener('click', gmRequestOrRevealScores);
-        document.getElementById('btn-gm-self-placard').addEventListener('click', toggleLocalPlacard);
-        document.getElementById('gm-self-score-slider').addEventListener('input', (e) => updateLocalScore(e.target.value));
+        // Botões Exclusivos do GM
+        document.getElementById('btn-gm-plaza-voice')?.addEventListener('click', gmTogglePlazaVoice);
+        document.getElementById('btn-gm-plaza-voice-alt')?.addEventListener('click', gmTogglePlazaVoice);
+        document.getElementById('btn-add-bots')?.addEventListener('click', addTestBots);
+        document.getElementById('btn-gm-random-jury')?.addEventListener('click', gmDrawRandomJury);
+        document.getElementById('btn-gm-request-scores')?.addEventListener('click', gmRequestOrRevealScores);
+        document.getElementById('btn-gm-self-placard')?.addEventListener('click', toggleLocalPlacard);
+        document.getElementById('gm-self-score-slider')?.addEventListener('input', (e) => updateLocalScore(e.target.value));
 
-        document.getElementById('btn-gm-toggle-reg').addEventListener('click', gmToggleRegistrations);
-        document.getElementById('gm-add-poet-form').addEventListener('submit', (e) => {
+        document.getElementById('btn-gm-toggle-reg')?.addEventListener('click', gmToggleRegistrations);
+        document.getElementById('gm-add-poet-form')?.addEventListener('submit', (e) => {
           e.preventDefault();
           const inp = document.getElementById('gm-manual-poet-input');
-          if (inp.value.trim()) {
+          if (inp && inp.value.trim()) {
             gmAddPoet(null, inp.value);
             inp.value = '';
           }
         });
-        document.getElementById('btn-gm-clear-poets').addEventListener('click', () => {
+        document.getElementById('btn-gm-clear-poets')?.addEventListener('click', () => {
           if (!appState.isHost) return;
           appState.room.registeredPoets = [];
           appState.room.drawnOrder = [];
           appState.room.currentPoetIndex = -1;
           hostBroadcastFullState();
         });
-        document.getElementById('btn-gm-draw-order').addEventListener('click', gmDrawPoetsOrder);
-        document.getElementById('btn-gm-call-next-poet').addEventListener('click', gmCallNextPoet);
-        document.getElementById('btn-gm-clear-stage').addEventListener('click', gmClearStagePoet);
+        document.getElementById('btn-gm-draw-order')?.addEventListener('click', gmDrawPoetsOrder);
+        document.getElementById('btn-gm-call-next-poet')?.addEventListener('click', gmCallNextPoet);
+        document.getElementById('btn-gm-clear-stage')?.addEventListener('click', gmClearStagePoet);
 
-        document.getElementById('btn-gm-timer-start').addEventListener('click', () => {
+        document.getElementById('btn-gm-timer-start')?.addEventListener('click', () => {
           if (!appState.isHost) return;
           appState.room.timerRunning = true;
-          updateTimerDisplays();
           hostBroadcastFullState();
         });
-        document.getElementById('btn-gm-timer-pause').addEventListener('click', () => {
+        document.getElementById('btn-gm-timer-pause')?.addEventListener('click', () => {
           if (!appState.isHost) return;
           appState.room.timerRunning = false;
-          updateTimerDisplays();
           hostBroadcastFullState();
         });
-        document.getElementById('btn-gm-timer-reset').addEventListener('click', () => {
+        document.getElementById('btn-gm-timer-reset')?.addEventListener('click', () => {
           if (!appState.isHost) return;
           appState.room.elapsedSeconds = 0;
           lastSecondTick = -1;
-          updateTimerDisplays();
           hostBroadcastFullState();
         });
-        document.getElementById('btn-gm-end-round').addEventListener('click', gmEndRoundAndSave);
+        document.getElementById('btn-gm-end-round')?.addEventListener('click', gmEndRoundAndSave);
+        document.getElementById('btn-gm-close-room')?.addEventListener('click', handleGmCloseRoomClick);
 
-        // Controles de Jurado
-        document.getElementById('juror-score-slider').addEventListener('input', (e) => updateLocalScore(e.target.value));
+        // Jurado & Plateia / Poeta
+        document.getElementById('btn-juror-leave-slam')?.addEventListener('click', () => leaveArenaSession('Você saiu do Slam.'));
+        document.getElementById('btn-poet-leave-slam')?.addEventListener('click', () => leaveArenaSession('Você saiu do Slam.'));
+        document.getElementById('juror-score-slider')?.addEventListener('input', (e) => updateLocalScore(e.target.value));
         document.querySelectorAll('.juror-quick-btn').forEach(btn => {
           btn.addEventListener('click', () => updateLocalScore(btn.dataset.jurorQuick));
         });
-        document.getElementById('btn-juror-toggle-placard').addEventListener('click', toggleLocalPlacard);
-        document.getElementById('btn-quick-placard').addEventListener('click', toggleLocalPlacard);
+        document.getElementById('btn-juror-toggle-placard')?.addEventListener('click', toggleLocalPlacard);
+        document.getElementById('btn-quick-placard')?.addEventListener('click', toggleLocalPlacard);
 
-        // Inscrição e reações da plateia
-        function handleAudienceSignup() {
+        const triggerSignup = () => {
           if (!appState.room.registrationsOpen) return;
           if (appState.isHost) {
             gmAddPoet(localUid, appState.localPlayer.name);
@@ -3732,13 +4289,15 @@
             });
           }
           showToast('🎩 Nome enviado para o chapeuzinho!');
-        }
-        document.getElementById('btn-audience-signup').addEventListener('click', handleAudienceSignup);
-        document.getElementById('btn-quick-signup').addEventListener('click', handleAudienceSignup);
-        document.getElementById('btn-quick-cheer').addEventListener('click', () => sendChatMessage('É POESIA! 🔥', false));
+        };
+        document.getElementById('btn-audience-signup')?.addEventListener('click', triggerSignup);
+        document.getElementById('btn-quick-signup')?.addEventListener('click', triggerSignup);
 
         document.querySelectorAll('.quick-chat-btn').forEach(btn => {
           btn.addEventListener('click', () => sendChatMessage(btn.dataset.quickChat, false));
+        });
+        document.getElementById('btn-quick-cheer')?.addEventListener('click', () => {
+          sendChatMessage('É POESIA! 🔥', false);
         });
 
         [
@@ -3746,28 +4305,28 @@
           { form: 'juror-chat-form', input: 'juror-chat-input', sys: false },
           { form: 'audience-chat-form', input: 'audience-chat-input', sys: false }
         ].forEach(cfg => {
-          document.getElementById(cfg.form).addEventListener('submit', (e) => {
+          document.getElementById(cfg.form)?.addEventListener('submit', (e) => {
             e.preventDefault();
             const inp = document.getElementById(cfg.input);
-            if (inp.value.trim()) {
+            if (inp && inp.value.trim()) {
               sendChatMessage(inp.value, cfg.sys);
               inp.value = '';
             }
           });
         });
 
-        // Joystick Analógico Virtual (Touch independente por identifier)
+        // Joystick Analógico Virtual (Touch)
         const joyEl = document.getElementById('virtual-joystick');
         const knobEl = document.getElementById('joystick-knob');
-        let joyTouchId = null;
+        let activeJoyTouchId = null;
 
-        function updateJoystickFromPoint(clientX, clientY) {
+        function updateJoystickFromTouch(touch) {
           const rect = joyEl.getBoundingClientRect();
           const cx = rect.left + rect.width / 2;
           const cy = rect.top + rect.height / 2;
           const maxR = rect.width * 0.36;
-          let dx = clientX - cx;
-          let dy = clientY - cy;
+          let dx = touch.clientX - cx;
+          let dy = touch.clientY - cy;
           const dist = Math.hypot(dx, dy);
           if (dist > maxR) {
             dx = (dx / dist) * maxR;
@@ -3778,48 +4337,55 @@
           appState.joyVec.y = dy / maxR;
         }
 
-        joyEl.addEventListener('touchstart', (e) => {
+        joyEl?.addEventListener('touchstart', (e) => {
           e.preventDefault();
+          if (activeJoyTouchId !== null) return;
           const t = e.changedTouches[0];
-          joyTouchId = t.identifier;
-          updateJoystickFromPoint(t.clientX, t.clientY);
+          activeJoyTouchId = t.identifier;
+          updateJoystickFromTouch(t);
         }, { passive: false });
 
-        joyEl.addEventListener('touchmove', (e) => {
+        joyEl?.addEventListener('touchmove', (e) => {
           e.preventDefault();
           for (let i = 0; i < e.changedTouches.length; i++) {
             const t = e.changedTouches[i];
-            if (t.identifier === joyTouchId) {
-              updateJoystickFromPoint(t.clientX, t.clientY);
+            if (t.identifier === activeJoyTouchId) {
+              updateJoystickFromTouch(t);
+              break;
             }
           }
         }, { passive: false });
 
-        function resetJoystick() {
-          joyTouchId = null;
-          knobEl.style.transform = 'translate(0px, 0px)';
-          appState.joyVec.x = 0;
-          appState.joyVec.y = 0;
-        }
-        joyEl.addEventListener('touchend', resetJoystick);
-        joyEl.addEventListener('touchcancel', resetJoystick);
+        const resetJoystick = (e) => {
+          for (let i = 0; i < e.changedTouches.length; i++) {
+            if (e.changedTouches[i].identifier === activeJoyTouchId) {
+              activeJoyTouchId = null;
+              appState.joyVec.x = 0;
+              appState.joyVec.y = 0;
+              knobEl.style.transform = 'translate(0px, 0px)';
+              break;
+            }
+          }
+        };
+        joyEl?.addEventListener('touchend', resetJoystick);
+        joyEl?.addEventListener('touchcancel', resetJoystick);
 
-        // Rotação de câmera por arraste livre na tela
+        // Câmera por Arraste (Mouse & Touch no Canvas)
         const canvasContainer = document.getElementById('canvas-container');
-        let lookTouchId = null;
+        let isDragging = false;
         let prevX = 0;
         let prevY = 0;
-        let mouseDragging = false;
+        let camTouchId = null;
 
         canvasContainer.addEventListener('mousedown', (e) => {
           if (!appState.hasEntered) return;
-          mouseDragging = true;
+          isDragging = true;
           prevX = e.clientX;
           prevY = e.clientY;
         });
 
         window.addEventListener('mousemove', (e) => {
-          if (!mouseDragging || !appState.hasEntered) return;
+          if (!isDragging || !appState.hasEntered) return;
           const dx = e.clientX - prevX;
           const dy = e.clientY - prevY;
           prevX = e.clientX;
@@ -3831,50 +4397,57 @@
         });
 
         window.addEventListener('mouseup', () => {
-          mouseDragging = false;
+          isDragging = false;
         });
 
+        canvasContainer.addEventListener('wheel', (e) => {
+          if (!appState.hasEntered || appState.cameraMode === 'first') return;
+          e.preventDefault();
+          appState.cameraDistance = Math.max(4.5, Math.min(22.0, appState.cameraDistance + e.deltaY * 0.008));
+        }, { passive: false });
+
         canvasContainer.addEventListener('touchstart', (e) => {
-          if (!appState.hasEntered) return;
-          for (let i = 0; i < e.changedTouches.length; i++) {
-            const t = e.changedTouches[i];
-            if (t.identifier !== joyTouchId && lookTouchId === null) {
-              lookTouchId = t.identifier;
-              prevX = t.clientX;
-              prevY = t.clientY;
-            }
-          }
+          if (!appState.hasEntered || camTouchId !== null) return;
+          const t = e.changedTouches[0];
+          camTouchId = t.identifier;
+          prevX = t.clientX;
+          prevY = t.clientY;
         }, { passive: true });
 
         canvasContainer.addEventListener('touchmove', (e) => {
-          if (!appState.hasEntered) return;
+          if (!appState.hasEntered || camTouchId === null) return;
           for (let i = 0; i < e.changedTouches.length; i++) {
             const t = e.changedTouches[i];
-            if (t.identifier === lookTouchId) {
+            if (t.identifier === camTouchId) {
               const dx = t.clientX - prevX;
               const dy = t.clientY - prevY;
               prevX = t.clientX;
               prevY = t.clientY;
-              appState.cameraYaw -= dx * 0.008;
+              appState.cameraYaw -= dx * 0.0075;
               const minP = appState.cameraMode === 'first' ? -0.65 : 0.08;
               const maxP = appState.cameraMode === 'first' ? 0.65 : 1.05;
               appState.cameraPitch = Math.max(minP, Math.min(maxP, appState.cameraPitch + dy * 0.006));
+              break;
             }
           }
         }, { passive: true });
 
-        canvasContainer.addEventListener('touchend', (e) => {
+        const endCamTouch = (e) => {
           for (let i = 0; i < e.changedTouches.length; i++) {
-            if (e.changedTouches[i].identifier === lookTouchId) {
-              lookTouchId = null;
+            if (e.changedTouches[i].identifier === camTouchId) {
+              camTouchId = null;
+              break;
             }
           }
-        });
+        };
+        canvasContainer.addEventListener('touchend', endCamTouch);
+        canvasContainer.addEventListener('touchcancel', endCamTouch);
 
-        // Atalhos de teclado
+        // Atalhos de Teclado
         window.addEventListener('keydown', (e) => {
           if (!appState.hasEntered) return;
           if (document.activeElement && document.activeElement.tagName === 'INPUT') return;
+
           switch (e.code) {
             case 'KeyW':
             case 'ArrowUp':
@@ -3896,6 +4469,7 @@
               applyCameraMode(appState.cameraMode === 'first' ? 'third' : 'first');
               break;
             case 'Space':
+            case 'KeyE':
               e.preventDefault();
               toggleLocalPlacard();
               break;
@@ -3932,22 +4506,28 @@
       }
 
       // =========================================================================
-      // 15. BOOTSTRAP INICIAL
+      // 16. INICIALIZAÇÃO SEGURA DO APLICATIVO
       // =========================================================================
-      window.addEventListener('DOMContentLoaded', () => {
+      function bootApp() {
         const params = new URLSearchParams(window.location.search);
         const urlRoom = params.get('sala');
         if (urlRoom) {
-          const clean = sanitizeRoomCode(urlRoom);
-          appState.roomCode = clean;
+          const cleanRoom = sanitizeRoomCode(urlRoom);
+          appState.roomCode = cleanRoom;
           const roomInp = document.getElementById('lobby-room-code-input');
-          if (roomInp) roomInp.value = clean;
+          if (roomInp) roomInp.value = cleanRoom;
         }
 
         setupUIListeners();
         initScene();
         animate();
-      });
+      }
+
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', bootApp);
+      } else {
+        bootApp();
+      }
     })();
   </script>
 </body>
